@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+/* 125% of the browser default (16px) gives a 20px base while still honouring user font settings. */
+html {
+  font-size: 125%;
+}
+
+body {
+  @apply bg-white text-neutral-950 dark:bg-neutral-950 dark:text-neutral-50;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,59 @@
+import { render, screen } from "@testing-library/react";
+import { createMemoryRouter, RouterProvider } from "react-router";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { routes } from "./routes";
+
+function renderAt(path: string) {
+  render(
+    <RouterProvider
+      router={createMemoryRouter(routes, { initialEntries: [path] })}
+    />,
+  );
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("routes", () => {
+  it("/shop shows the Talk to Aide button and a healthy connection", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(Response.json({ status: "ok" })),
+    );
+    renderAt("/shop");
+
+    expect(screen.getByRole("button", { name: "Talk to Aide" })).toHaveClass(
+      "min-h-16",
+    );
+    await screen.findByText("Connected to Aide");
+    expect(screen.getByRole("status")).toHaveTextContent("Connected to Aide");
+  });
+
+  it("/care shows the dashboard heading and reports an unreachable API", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    );
+    renderAt("/care");
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Caregiver dashboard" }),
+    ).toBeVisible();
+    await screen.findByText("Cannot reach Aide right now");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Cannot reach Aide right now",
+    );
+  });
+
+  it("/ redirects to /shop", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(Response.json({ status: "ok" })),
+    );
+    renderAt("/");
+
+    expect(screen.getByRole("button", { name: "Talk to Aide" })).toBeVisible();
+  });
+});
