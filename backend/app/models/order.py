@@ -19,11 +19,15 @@ class Order(Base):
     price: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     currency: Mapped[str] = mapped_column(String(3))
     confirmed_total: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     paypal_order_id: Mapped[str | None] = mapped_column(String(64), unique=True)
     paypal_auth_id: Mapped[str | None] = mapped_column(String(64), unique=True)
     status: Mapped[OrderStatus] = mapped_column(
         Enum(OrderStatus, native_enum=False, create_constraint=True),
         default=OrderStatus.draft,
         index=True,
+    )
+    status_changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

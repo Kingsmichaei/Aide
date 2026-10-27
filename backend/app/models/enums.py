@@ -24,3 +24,9 @@ class OrderStatus(enum.StrEnum):
 class Decision(enum.StrEnum):
     approved = "approved"
     declined = "declined"
+
+
+class Actor(enum.StrEnum):
+    shopper = "shopper"
+    caregiver = "caregiver"
+    system = "system"

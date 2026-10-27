@@ -38,7 +38,7 @@ def check(
 def monthly_spend(
     session: Session, shopper_id: int, currency: str, now: datetime | None = None
 ) -> Decimal:
-    """Total captured this calendar month (UTC) in `currency`."""
+    """Total captured this calendar month (UTC) in `currency`, by capture time."""
     month_start = (now or datetime.now(UTC)).replace(
         day=1, hour=0, minute=0, second=0, microsecond=0
     )
@@ -47,7 +47,7 @@ def monthly_spend(
             Order.shopper_id == shopper_id,
             Order.currency == currency,
             Order.status == OrderStatus.captured,
-            Order.created_at >= month_start,
+            Order.status_changed_at >= month_start,
         )
     )
     return Decimal(total)
