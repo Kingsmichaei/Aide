@@ -17,18 +17,13 @@ afterEach(() => {
 });
 
 describe("routes", () => {
-  it("/shop shows the Talk to Aide button and a healthy connection", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(Response.json({ status: "ok" })),
-    );
+  it("/shop shows the chat form", () => {
     renderAt("/shop");
 
-    expect(screen.getByRole("button", { name: "Talk to Aide" })).toHaveClass(
+    expect(screen.getByLabelText("Type your message")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Send" })).toHaveClass(
       "min-h-16",
     );
-    await screen.findByText("Connected to Aide");
-    expect(screen.getByRole("status")).toHaveTextContent("Connected to Aide");
   });
 
   it("/care shows the dashboard heading and reports an unreachable API", async () => {
@@ -54,6 +49,6 @@ describe("routes", () => {
     );
     renderAt("/");
 
-    expect(screen.getByRole("button", { name: "Talk to Aide" })).toBeVisible();
+    expect(screen.getByLabelText("Type your message")).toBeVisible();
   });
 });

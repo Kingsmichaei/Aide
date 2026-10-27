@@ -49,6 +49,10 @@ services:
     envVars:
       - key: VITE_API_URL # e.g. https://aide-api.onrender.com
         sync: false
+      - key: VITE_PAYPAL_CLIENT_ID # same sandbox client id as PAYPAL_CLIENT_ID
+        sync: false
+      - key: VITE_DEMO_SHOPPER_ID # id printed by the seed script
+        value: "1"
 
 databases:
   - name: aide-db
