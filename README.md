@@ -22,10 +22,20 @@ Built for the PayPal AI Hackathon 2026. All payments run in the PayPal **sandbox
 ### Environment
 
 ```sh
-cp .env.example .env
+cp .env.example .env                    # back end
+cp frontend/.env.example frontend/.env  # front end
 ```
 
-The defaults in `.env.example` work for local development with the Docker database above. Both parts read the same `.env` at the repo root.
+The defaults work for local development with the Docker database above. The back end reads `backend/.env` and the repo-root `.env`. The front end reads only `frontend/.env`, and Vite builds those `VITE_*` values into the bundle, so never put secrets there.
+
+To shop end to end you also need:
+
+| Key | Where to get it |
+| --- | --- |
+| `LLM_API_KEY` | A Gemini API key from Google AI Studio (`LLM_PROVIDER=gemini`) |
+| `CHANNEL3_API_KEY` | Your Channel3 dashboard |
+| `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` | developer.paypal.com → Apps & Credentials → **Sandbox** → your app |
+| `VITE_PAYPAL_CLIENT_ID` (in `frontend/.env`) | The same sandbox client id as `PAYPAL_CLIENT_ID` |
 
 ### Back end (http://localhost:8000)
 
@@ -33,8 +43,11 @@ The defaults in `.env.example` work for local development with the Docker databa
 cd backend
 uv sync
 uv run alembic upgrade head
+uv run python -m app.seed   # demo shopper (Rosa, $100 per-order limit) and caregiver (Sam)
 uv run uvicorn app.main:app --reload
 ```
+
+The seed script prints the shopper's id. If it is not `1`, set `VITE_DEMO_SHOPPER_ID` in `frontend/.env`.
 
 Check it: <http://localhost:8000/health> should return `{"status":"ok"}`.
 

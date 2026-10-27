@@ -116,7 +116,7 @@ describe("ShopPage", () => {
 
     expect(api.sendChat).toHaveBeenCalledWith(1, "I need a kettle");
     const reply = conversation().getByText("I found a kettle.").closest("li");
-    expect(reply).toHaveFocus();
+    await waitFor(() => expect(reply).toHaveFocus());
     expect(screen.getByRole("status")).toHaveTextContent("I found a kettle.");
     const card = screen.getByRole("article", { name: "Blue kettle" });
     expect(within(card).getByText("$29.99")).toBeVisible();
@@ -133,9 +133,11 @@ describe("ShopPage", () => {
     );
     const panel = screen.getByRole("region", { name: "Check your order" });
     expect(within(panel).getByText("Total")).toBeVisible();
-    expect(
-      screen.getByRole("heading", { name: "Check your order" }),
-    ).toHaveFocus();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { name: "Check your order" }),
+      ).toHaveFocus(),
+    );
   });
 
   it("pays with PayPal after 'Yes, buy it' and shows Paid", async () => {
@@ -165,7 +167,8 @@ describe("ShopPage", () => {
     });
     paypalButton.click();
 
-    expect(await screen.findByRole("heading", { name: "Paid" })).toHaveFocus();
+    const paid = await screen.findByRole("heading", { name: "Paid" });
+    await waitFor(() => expect(paid).toHaveFocus());
     expect(api.createPayPalOrder).toHaveBeenCalledWith(7);
     expect(api.approveOrder).toHaveBeenCalledWith(7);
     expect(callbacks).not.toBeNull();
