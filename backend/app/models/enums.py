@@ -1,0 +1,26 @@
+import enum
+
+
+class Role(enum.StrEnum):
+    shopper = "shopper"
+    caregiver = "caregiver"
+
+
+class CareLinkStatus(enum.StrEnum):
+    pending = "pending"
+    active = "active"
+    revoked = "revoked"
+
+
+class OrderStatus(enum.StrEnum):
+    draft = "draft"
+    awaiting_shopper = "awaiting_shopper"
+    awaiting_caregiver = "awaiting_caregiver"
+    captured = "captured"
+    voided = "voided"
+    refunded = "refunded"
+
+
+class Decision(enum.StrEnum):
+    approved = "approved"
+    declined = "declined"
