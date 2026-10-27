@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://aide:aide@localhost:5432/aide"
     llm_provider: str = ""
     llm_api_key: str = ""
+    llm_model: str = "gemini-3.8-flash"
     paypal_client_id: str = ""
     paypal_client_secret: str = ""
     paypal_environment: str = "SANDBOX"

@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from app.agent.llm import LLMClient, make_llm
 from app.config import get_settings
 from app.services.channel3 import Channel3Client
 from app.services.paypal import PayPalClient
@@ -16,3 +17,9 @@ def get_channel3() -> Channel3Client:
 def get_paypal() -> PayPalClient:
     settings = get_settings()
     return PayPalClient(settings.paypal_client_id, settings.paypal_client_secret)
+
+
+@lru_cache
+def get_llm() -> LLMClient:
+    settings = get_settings()
+    return make_llm(settings.llm_provider, settings.llm_api_key, settings.llm_model)

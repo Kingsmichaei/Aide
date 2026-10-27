@@ -8,18 +8,20 @@ from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db import get_session
 from app.deps import get_channel3, get_paypal
 from app.models import Actor, Order, OrderStatus, Role, User
+from app.schemas import OrderOut
 from app.services import limits
 from app.services.channel3 import Channel3Client, Channel3Error
 from app.services.orders import (
     RecheckResult,
     apply_new_offer,
     blocked_categories,
+    create_draft,
     recheck_price,
     record,
     total,
@@ -31,29 +33,6 @@ router = APIRouter(prefix="/orders", tags=["orders"])
 SessionDep = Annotated[Session, Depends(get_session)]
 Channel3Dep = Annotated[Channel3Client, Depends(get_channel3)]
 PayPalDep = Annotated[PayPalClient, Depends(get_paypal)]
-
-
-class OrderOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    shopper_id: int
-    status: OrderStatus
-    channel3_product_id: str
-    title: str
-    retailer: str
-    price: Decimal
-    currency: str
-    total: Decimal
-    confirmed_total: Decimal | None
-    confirmed_at: datetime | None
-    paypal_order_id: str | None
-    status_changed_at: datetime
-
-    @classmethod
-    def of(cls, order: Order) -> "OrderOut":
-        fields = {name: getattr(order, name) for name in cls.model_fields if name != "total"}
-        return cls(**fields, total=total(order))
 
 
 class DraftIn(BaseModel):
@@ -81,7 +60,7 @@ class PayPalOut(BaseModel):
 
 
 @router.post("/draft", status_code=status.HTTP_201_CREATED)
-async def create_draft(body: DraftIn, session: SessionDep, channel3: Channel3Dep) -> OrderOut:
+async def draft_order(body: DraftIn, session: SessionDep, channel3: Channel3Dep) -> OrderOut:
     shopper = session.get(User, body.shopper_id)
     if shopper is None or shopper.role != Role.shopper:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Shopper not found")
@@ -94,19 +73,7 @@ async def create_draft(body: DraftIn, session: SessionDep, channel3: Channel3Dep
     if product is None or product.best_offer is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Product not available")
 
-    offer = product.best_offer
-    order = Order(
-        shopper_id=shopper.id,
-        channel3_product_id=product.id,
-        title=product.title,
-        retailer=offer.retailer,
-        price=offer.price,
-        currency=offer.currency,
-        status=OrderStatus.draft,
-    )
-    session.add(order)
-    session.flush()
-    record(session, order, Actor.shopper, "drafted", offer=offer)
+    order = create_draft(session, shopper.id, product, Actor.shopper)
     session.commit()
     return OrderOut.of(order)
 

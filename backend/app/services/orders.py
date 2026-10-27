@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.models import Actor, Limit, Order, OrderEvent, OrderStatus
-from app.services.channel3 import Channel3Client, Offer
+from app.services.channel3 import Channel3Client, Offer, ProductDetail
 
 PRICE_TOLERANCE = Decimal("0.05")  # CLAUDE.md payment rule 4
 
@@ -49,6 +49,26 @@ def record(
     if new_status != order.status:
         order.status = new_status
         order.status_changed_at = now
+
+
+def create_draft(session: Session, shopper_id: int, product: ProductDetail, actor: Actor) -> Order:
+    """Draft an order for the product's best offer. Drafting never moves money."""
+    if product.best_offer is None:
+        raise ValueError(f"Product {product.id} has no offer to draft")
+    offer = product.best_offer
+    order = Order(
+        shopper_id=shopper_id,
+        channel3_product_id=product.id,
+        title=product.title,
+        retailer=offer.retailer,
+        price=offer.price,
+        currency=offer.currency,
+        status=OrderStatus.draft,
+    )
+    session.add(order)
+    session.flush()
+    record(session, order, actor, "drafted", offer=offer)
+    return order
 
 
 def blocked_categories(session: Session, shopper_id: int) -> list[str]:
