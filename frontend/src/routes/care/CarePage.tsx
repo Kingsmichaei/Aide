@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useLoaderData, useNavigate } from "react-router";
 
 import { HealthStatus } from "../../components/HealthStatus";
@@ -8,6 +8,7 @@ import {
   type CaredForShopper,
   type SessionUser,
 } from "../../lib/api";
+import { LimitsForm } from "./LimitsForm";
 
 // The caregiver dashboard is English-only for now: caregivers have no
 // language setting yet. The shopper app is fully translated.
@@ -15,6 +16,10 @@ export function CarePage() {
   const caregiver = useLoaderData<SessionUser>();
   const navigate = useNavigate();
   const [shoppers, setShoppers] = useState<CaredForShopper[] | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const pickerId = useId();
+  const selected =
+    shoppers?.find((shopper) => shopper.id === selectedId) ?? shoppers?.[0];
 
   useEffect(() => {
     getCaredForShoppers()
@@ -58,7 +63,25 @@ export function CarePage() {
             ))}
           </ul>
         )}
+        {shoppers && shoppers.length > 1 && (
+          <p className="flex items-center gap-2">
+            <label htmlFor={pickerId}>Show</label>
+            <select
+              id={pickerId}
+              value={selected?.id}
+              onChange={(event) => setSelectedId(Number(event.target.value))}
+              className="rounded-lg border-2 border-neutral-500 px-3 py-2 dark:bg-neutral-900"
+            >
+              {shoppers.map((shopper) => (
+                <option key={shopper.id} value={shopper.id}>
+                  {shopper.name}
+                </option>
+              ))}
+            </select>
+          </p>
+        )}
       </section>
+      {selected && <LimitsForm key={selected.id} shopper={selected} />}
     </main>
   );
 }

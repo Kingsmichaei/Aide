@@ -1,4 +1,7 @@
-"""Channel3 product search. Docs: https://channel3.ai/docs/api-reference/v1/search"""
+"""Channel3 product search and categories.
+
+Docs: https://channel3.ai/docs/api-reference/v1/search and .../v1/list-categories
+"""
 
 from collections.abc import Collection
 from decimal import Decimal
@@ -9,6 +12,8 @@ from pydantic import BaseModel
 
 BASE_URL = "https://api.trychannel3.com"
 MAX_LIMIT = 30  # API maximum for search and similar
+CATEGORY_PAGE_SIZE = 100  # API maximum for /v1/categories
+CATEGORY_SEARCH_LIMIT = 20  # API maximum for /v1/categories/search
 
 
 class Channel3Error(Exception):
@@ -35,6 +40,13 @@ class Product(BaseModel):
 class ProductDetail(Product):
     description: str | None
     offers: list[Offer]
+
+
+class Category(BaseModel):
+    slug: str
+    title: str
+    # Titles from the root down to this category, e.g. ["Health", "Vitamins"].
+    path: list[str]
 
 
 class Channel3Client:
@@ -76,6 +88,26 @@ class Channel3Client:
         data = await self._request("POST", "/v1/similar", json=body)
         return _summaries(data["products"], limit, blocked_categories)
 
+    async def list_root_categories(self, max_pages: int = 5) -> list[Category]:
+        """Top-level categories. Blocking one blocks everything under it."""
+        categories: list[Category] = []
+        for page in range(1, max_pages + 1):
+            params = {"roots_only": "true", "page": page, "page_size": CATEGORY_PAGE_SIZE}
+            data = await self._request("GET", "/v1/categories", params=params)
+            categories += [_category(raw) for raw in data["items"]]
+            if page * data["page_size"] >= data["total"]:
+                break
+        return categories
+
+    async def search_categories(self, query: str) -> list[Category]:
+        params = {"query": query, "limit": CATEGORY_SEARCH_LIMIT}
+        data = await self._request("GET", "/v1/categories/search", params=params)
+        return [_category(raw) for raw in data["categories"]]
+
+    async def get_category(self, slug: str) -> Category | None:
+        data = await self._request("GET", f"/v1/categories/{slug}", allow_404=True)
+        return None if data is None else _category(data)
+
     async def _request(
         self, method: str, path: str, *, allow_404: bool = False, **kwargs: Any
     ) -> Any:
@@ -85,6 +117,11 @@ class Channel3Client:
         if response.is_error:
             raise Channel3Error(f"Channel3 {method} {path} failed: HTTP {response.status_code}")
         return response.json()
+
+
+def _category(raw: dict[str, Any]) -> Category:
+    path = [ref["title"] for ref in raw.get("path") or []] or [raw["title"]]
+    return Category(slug=raw["slug"], title=raw["title"], path=path)
 
 
 def _fetch_limit(limit: int, blocked_categories: Collection[str]) -> int:

@@ -167,3 +167,52 @@ async def test_errors_raise_channel3_error() -> None:
 
     with pytest.raises(Channel3Error, match="HTTP 402"):
         await client.search_products("kettle")
+
+
+def category(slug: str, title: str, *parents: tuple[str, str]) -> dict[str, Any]:
+    path = [{"slug": s, "title": t} for s, t in parents] + [{"slug": slug, "title": title}]
+    return {"slug": slug, "title": title, "path": path, "has_children": False}
+
+
+async def test_root_categories_follow_pages() -> None:
+    pages = {
+        "1": [category(f"c{i}", f"Cat {i}") for i in range(100)],
+        "2": [category("health", "Health")],
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        page = request.url.params["page"]
+        return httpx.Response(
+            200, json={"items": pages[page], "page": int(page), "page_size": 100, "total": 101}
+        )
+
+    client, seen = client_for(handler)
+
+    roots = await client.list_root_categories()
+
+    assert len(roots) == 101
+    assert roots[-1].slug == "health"
+    assert seen[0].url.path == "/v1/categories"
+    assert seen[0].url.params["roots_only"] == "true"
+    assert len(seen) == 2
+
+
+async def test_search_categories_returns_paths() -> None:
+    hit = category("vitamins", "Vitamins", ("health", "Health"))
+    client, seen = client_for(lambda _: httpx.Response(200, json={"categories": [hit]}))
+
+    [result] = await client.search_categories("vitamins")
+
+    assert (result.slug, result.title, result.path) == (
+        "vitamins",
+        "Vitamins",
+        ["Health", "Vitamins"],
+    )
+    assert seen[0].url.path == "/v1/categories/search"
+    assert seen[0].url.params["query"] == "vitamins"
+
+
+async def test_get_category_is_none_when_unknown() -> None:
+    client, _ = client_for(lambda _: httpx.Response(404, json={"detail": "Not found"}))
+
+    assert await client.get_category("not-a-category") is None

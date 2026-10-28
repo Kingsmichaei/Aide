@@ -19,6 +19,33 @@ export interface CaredForShopper {
   language: Language;
 }
 
+export interface Category {
+  slug: string;
+  title: string;
+  /** Titles from the top category down, e.g. ["Health", "Vitamins"]. */
+  path: string[];
+}
+
+export const LIMIT_CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD"] as const;
+export type LimitCurrency = (typeof LIMIT_CURRENCIES)[number];
+
+export interface Limits {
+  /** False until a caregiver saves limits; until then no order needs approval. */
+  is_set: boolean;
+  per_order_max: string | null;
+  monthly_max: string | null;
+  currency: LimitCurrency;
+  blocked_categories: Category[];
+}
+
+export interface LimitsInput {
+  per_order_max: string;
+  monthly_max: string;
+  currency: LimitCurrency;
+  /** Channel3 category slugs. */
+  blocked_categories: string[];
+}
+
 export interface HealthResponse {
   status: string;
 }
@@ -171,6 +198,23 @@ export function signOut(): Promise<void> {
 
 export function getCaredForShoppers(): Promise<CaredForShopper[]> {
   return request("/care/shoppers");
+}
+
+/** Top-level Channel3 categories, or those matching `query`. */
+export function getCategories(query = ""): Promise<Category[]> {
+  const search = query ? `?query=${encodeURIComponent(query)}` : "";
+  return request(`/care/categories${search}`);
+}
+
+export function getLimits(shopperId: number): Promise<Limits> {
+  return request(`/care/shoppers/${shopperId}/limits`);
+}
+
+export function saveLimits(
+  shopperId: number,
+  limits: LimitsInput,
+): Promise<Limits> {
+  return send("PUT", `/care/shoppers/${shopperId}/limits`, limits);
 }
 
 export function sendChat(
