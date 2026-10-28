@@ -9,14 +9,16 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, model_validator
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, check_is_shopper
 from app.db import get_session
 from app.deps import get_channel3, get_paypal
-from app.models import Actor, ConfirmationMethod, Order, OrderStatus, User
+from app.models import Actor, Approval, ConfirmationMethod, Order, OrderStatus, User
 from app.schemas import OrderOut
 from app.services import consent, limits
+from app.services.alerts import ask_caregivers, caregivers_of
 from app.services.channel3 import Channel3Client, Channel3Error
 from app.services.orders import (
     RecheckResult,
@@ -71,6 +73,14 @@ class PayPalOut(BaseModel):
     paypal_order_id: str
 
 
+class OrderStatusOut(BaseModel):
+    """What the shopper app polls while an order waits for a caregiver."""
+
+    order: OrderOut
+    caregiver_name: str | None  # who will decide; None if nobody looks after them
+    note: str | None  # the caregiver's note with their latest decision
+
+
 @router.post("/draft", status_code=status.HTTP_201_CREATED)
 async def draft_order(
     body: DraftIn, session: SessionDep, channel3: Channel3Dep, user: CurrentUser
@@ -89,6 +99,20 @@ async def draft_order(
     order = create_draft(session, shopper.id, product, Actor.shopper)
     session.commit()
     return OrderOut.of(order)
+
+
+@router.get("/{order_id}")
+def order_status(order_id: int, session: SessionDep, user: CurrentUser) -> OrderStatusOut:
+    order = _get(session, order_id, user)
+    caregivers = caregivers_of(session, order.shopper_id)
+    decision = session.scalars(
+        select(Approval).where(Approval.order_id == order.id).order_by(Approval.id.desc())
+    ).first()
+    return OrderStatusOut(
+        order=OrderOut.of(order),
+        caregiver_name=caregivers[0].name if caregivers else None,
+        note=decision.note if decision else None,
+    )
 
 
 @router.post("/{order_id}/confirm")
@@ -200,6 +224,7 @@ async def approved(
     decision = limits.check(session, order.shopper_id, order.confirmed_total, order.currency)
     if decision == limits.LimitDecision.needs_caregiver:
         record(session, order, Actor.system, "sent_to_caregiver", OrderStatus.awaiting_caregiver)
+        ask_caregivers(session, order)
     else:
         try:
             capture = await paypal.capture(auth.id)

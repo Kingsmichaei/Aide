@@ -47,10 +47,20 @@ export const es: Messages = {
     detailsChanged: "Algo cambió. Revise el pedido otra vez, por favor.",
     unavailable: "Lo siento, este artículo ya no está disponible.",
     paidHeading: "Pagado",
-    approvalHeading: "Enviado a su cuidador para que lo apruebe",
+    waitingHeading: (name) => `Esperando a que ${name} lo apruebe`,
     paid: (amount, title) => `Pagó ${amount} por ${title}. Ya está en camino.`,
-    needsApproval: (title, amount) =>
-      `${title} cuesta ${amount}. Supera su límite, así que su cuidador lo revisará primero. Solo paga si dice que sí.`,
+    waiting: (title, amount, name) =>
+      `${title} cuesta ${amount}. Supera su límite, así que ${name} lo revisará primero. Solo paga si dice que sí.`,
+    approvedHeading: "Aprobado, su pedido está pagado",
+    approved: (name, title, amount) =>
+      `${name} dijo que sí. Pagó ${amount} por ${title}. Ya está en camino.`,
+    declinedHeading: "Esta vez no se compró",
+    declined: (name) =>
+      `${name} dijo que no esta vez, así que no se pagó nada. No pasa nada. Puede pedirme otra cosa.`,
+    caregiverNote: (name, note) => `${name} escribió: «${note}»`,
+    expired: (name) =>
+      `El pago tardó demasiado mientras esperaba a ${name}, así que no se pagó nada. Revise el pedido y diga que sí otra vez.`,
+    yourCaregiver: "su cuidador",
     shopAgain: "Comprar otra cosa",
   },
   card: {

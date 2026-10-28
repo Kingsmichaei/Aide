@@ -12,4 +12,5 @@ def test_all_tables_are_registered() -> None:
         "approvals",
         "recurring_orders",
         "order_events",
+        "notifications",
     }

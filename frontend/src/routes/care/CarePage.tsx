@@ -10,6 +10,7 @@ import {
 } from "../../lib/api";
 import { ApprovalQueue } from "./ApprovalQueue";
 import { LimitsForm } from "./LimitsForm";
+import { NotificationsBell } from "./NotificationsBell";
 
 // The caregiver dashboard is English-only for now: caregivers have no
 // language setting yet. The shopper app is fully translated.
@@ -33,7 +34,8 @@ export function CarePage() {
       <title>Aide – Caregiver</title>
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-3xl font-bold">Caregiver dashboard</h1>
-        <p className="flex items-center gap-4">
+        <p className="flex flex-wrap items-center gap-4">
+          <NotificationsBell />
           Signed in as {caregiver.name}
           <button
             type="button"

@@ -24,8 +24,24 @@ vi.mock("../../lib/api", async (importOriginal) => {
     confirmOrder: vi.fn(),
     createPayPalOrder: vi.fn(),
     approveOrder: vi.fn(),
+    getOrderStatus: vi.fn(),
   };
 });
+
+// Polling is driven by hand: `poll()` runs the page's latest check.
+let latestCheck: (() => void) | null = null;
+vi.mock("../../lib/usePolling", () => ({
+  POLL_MS: 10_000,
+  usePolling: (check: () => void, active = true) => {
+    latestCheck = active ? check : null;
+  },
+}));
+
+function poll() {
+  if (!latestCheck) throw new Error("the page is not polling");
+  const check = latestCheck;
+  act(() => check());
+}
 
 // A fake PayPal SDK: clicking the button runs createOrder, then approves.
 let callbacks: PayPalSessionCallbacks | null = null;
@@ -190,37 +206,6 @@ describe("ShopPage", () => {
     expect(api.createPayPalOrder).toHaveBeenCalledWith(7);
     expect(api.approveOrder).toHaveBeenCalledWith(7);
     expect(callbacks).not.toBeNull();
-  });
-
-  it("shows the caregiver message when the order is over the limit", async () => {
-    vi.mocked(api.confirmOrder).mockResolvedValue({
-      confirmed: true,
-      reason: null,
-      order: confirmed,
-    });
-    vi.mocked(api.createPayPalOrder).mockResolvedValue({
-      paypal_order_id: "PP-1",
-    });
-    vi.mocked(api.approveOrder).mockResolvedValue({
-      ...confirmed,
-      status: "awaiting_caregiver",
-    });
-    await searchForKettle();
-    await chooseAndConfirm();
-    fireEvent.click(screen.getByRole("button", { name: "Yes, buy it" }));
-
-    const button = await waitFor(() => {
-      const el = document.querySelector("paypal-button");
-      if (!el) throw new Error("not yet");
-      return el as HTMLElement;
-    });
-    button.click();
-
-    expect(
-      await screen.findByRole("heading", {
-        name: "Sent to your caregiver for approval",
-      }),
-    ).toBeVisible();
   });
 
   it("asks again when the price changed", async () => {
@@ -749,5 +734,123 @@ describe("Voice and languages", () => {
         }),
       );
     });
+  });
+});
+
+describe("waiting for the caregiver", () => {
+  const waitingOrder: api.Order = {
+    ...confirmed,
+    status: "awaiting_caregiver",
+  };
+
+  /** The result panel, not the screen-reader announcement that repeats it. */
+  function result(heading: string) {
+    return within(screen.getByRole("region", { name: heading }));
+  }
+
+  function statusIs(order: api.Order, note: string | null = null) {
+    vi.mocked(api.getOrderStatus).mockResolvedValue({
+      order,
+      caregiver_name: "Sam",
+      note,
+    });
+  }
+
+  /** Over the limit: confirm, approve in PayPal, land on "Waiting for Sam". */
+  async function reachWaiting() {
+    vi.mocked(api.confirmOrder).mockResolvedValue({
+      confirmed: true,
+      reason: null,
+      order: confirmed,
+    });
+    vi.mocked(api.createPayPalOrder).mockResolvedValue({
+      paypal_order_id: "PP-1",
+    });
+    vi.mocked(api.approveOrder).mockResolvedValue(waitingOrder);
+    statusIs(waitingOrder);
+    await searchForKettle();
+    await chooseAndConfirm();
+    fireEvent.click(screen.getByRole("button", { name: "Yes, buy it" }));
+    const button = await waitFor(() => {
+      const el = document.querySelector("paypal-button");
+      if (!el) throw new Error("not yet");
+      return el as HTMLElement;
+    });
+    button.click();
+    return screen.findByRole("heading", { name: "Waiting for Sam to approve" });
+  }
+
+  it("says who it is waiting for, and that nothing is paid yet", async () => {
+    await reachWaiting();
+
+    expect(
+      result("Waiting for Sam to approve").getByText(
+        "Blue kettle costs $29.99. That is over your limit, so Sam will check it first. You only pay if they say yes.",
+      ),
+    ).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "so Sam will check it",
+    );
+  });
+
+  it("updates without a reload when Sam approves", async () => {
+    await reachWaiting();
+
+    statusIs({ ...confirmed, status: "captured" });
+    poll();
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Approved, your order is paid",
+      }),
+    ).toBeVisible();
+    expect(
+      result("Approved, your order is paid").getByText(
+        "Sam said yes. You paid $29.99 for Blue kettle. It is on its way.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("gives a kind decline with Sam's note", async () => {
+    await reachWaiting();
+
+    statusIs({ ...confirmed, status: "voided" }, "We have plenty at home");
+    poll();
+
+    expect(
+      await screen.findByRole("heading", { name: "Not bought this time" }),
+    ).toBeVisible();
+    const panel = result("Not bought this time");
+    expect(
+      panel.getByText(/Sam said no this time, so nothing was paid/),
+    ).toBeVisible();
+    expect(
+      panel.getByText("Sam wrote: “We have plenty at home”"),
+    ).toBeVisible();
+  });
+
+  it("asks to confirm again if the payment hold ran out", async () => {
+    await reachWaiting();
+
+    statusIs({ ...draftOrder, status: "awaiting_shopper" });
+    poll();
+
+    expect(
+      await screen.findByRole("heading", { name: "Check your order" }),
+    ).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "The payment took too long while waiting for Sam, so nothing was paid.",
+    );
+  });
+
+  it("stops checking once Sam has decided", async () => {
+    await reachWaiting();
+    statusIs({ ...confirmed, status: "captured" });
+    poll();
+    await screen.findByRole("heading", {
+      name: "Approved, your order is paid",
+    });
+
+    expect(latestCheck).toBeNull();
   });
 });

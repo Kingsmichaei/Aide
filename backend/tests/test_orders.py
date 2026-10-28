@@ -11,7 +11,17 @@ from app.auth import current_user
 from app.db import get_session
 from app.deps import get_channel3, get_paypal
 from app.main import app
-from app.models import Limit, Order, OrderEvent, Role, User
+from app.models import (
+    AlertKind,
+    CareLink,
+    CareLinkStatus,
+    Limit,
+    Notification,
+    Order,
+    OrderEvent,
+    Role,
+    User,
+)
 from app.services.channel3 import Offer, ProductDetail
 from app.services.paypal import Authorization, Capture, PayPalOrder
 
@@ -173,6 +183,54 @@ def test_over_limit_waits_for_caregiver_without_capturing(
     assert "capture" not in paypal.calls
     assert session.get(Order, order["id"]).paypal_auth_id == "AUTH-1"
     assert events(session, order["id"])[-1] == "sent_to_caregiver"
+
+
+def test_over_limit_alerts_every_linked_caregiver(
+    client: TestClient, session: Session, channel3: FakeChannel3, shopper_id: int
+) -> None:
+    sam = User(name="Sam", role=Role.caregiver)
+    lee = User(name="Lee", role=Role.caregiver)  # link not accepted yet
+    session.add_all([sam, lee])
+    session.flush()
+    session.add_all(
+        [
+            CareLink(shopper_id=shopper_id, caregiver_id=sam.id, status=CareLinkStatus.active),
+            CareLink(shopper_id=shopper_id, caregiver_id=lee.id, status=CareLinkStatus.pending),
+        ]
+    )
+    session.commit()
+    channel3.price = Decimal("150.00")
+    order = draft(client, shopper_id)
+    confirm(client, order)
+    client.post(f"/orders/{order['id']}/paypal")
+
+    client.post(f"/orders/{order['id']}/approved")
+    client.post(f"/orders/{order['id']}/approved")  # a repeat call alerts nobody again
+
+    [alert] = session.scalars(select(Notification)).all()
+    assert (alert.user_id, alert.kind, alert.order_id) == (
+        sam.id,
+        AlertKind.approval_needed,
+        order["id"],
+    )
+    assert alert.params == {
+        "title": "Electric kettle",
+        "total": "150.00",
+        "currency": "USD",
+        "shopper_name": "Rosa",
+    }
+    status = client.get(f"/orders/{order['id']}").json()
+    assert (status["order"]["status"], status["caregiver_name"]) == ("awaiting_caregiver", "Sam")
+
+
+def test_within_limit_alerts_nobody(client: TestClient, session: Session, shopper_id: int) -> None:
+    order = draft(client, shopper_id)
+    confirm(client, order)
+    client.post(f"/orders/{order['id']}/paypal")
+
+    client.post(f"/orders/{order['id']}/approved")
+
+    assert session.scalars(select(Notification)).all() == []
 
 
 def test_approved_is_safe_to_call_twice(

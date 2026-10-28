@@ -1,9 +1,17 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+  type Ref,
+} from "react";
 
 import { LANGUAGE_NAMES, MESSAGES, money, type Messages } from "../../i18n";
 import { useI18n } from "../../i18n/useI18n";
 import {
   confirmOrder,
+  getOrderStatus,
   sendChat,
   type ConfirmReason,
   type Language,
@@ -13,6 +21,7 @@ import {
 import { useCurrentUser } from "../../lib/session";
 import { readBack, replyChunks } from "../../lib/readout";
 import { useSettings } from "../../lib/settings-context";
+import { usePolling } from "../../lib/usePolling";
 import {
   canListen,
   canSpeak,
@@ -63,6 +72,11 @@ export function ShopPage() {
   const [error, setError] = useState<string | null>(null);
   // The shopper's last spoken answer to "Shall I buy it?".
   const [heard, setHeard] = useState<string | null>(null);
+  // Set once an order goes to the caregiver: who decides, and their note.
+  const [caregiver, setCaregiver] = useState<{
+    name: string;
+    note: string | null;
+  } | null>(null);
   // Set when Aide answered in a different language from the shopper's setting.
   const [suggestedLanguage, setSuggestedLanguage] = useState<Language | null>(
     null,
@@ -228,13 +242,58 @@ export function ShopPage() {
     askToBuy(updated, why);
   }
 
-  function finish(updated: Order) {
-    setOrder(updated);
-    setStage("done");
-    const text = resultText(updated, t, language);
+  /** Show and say how the order ended, or that it waits for the caregiver. */
+  function tell(text: string) {
     setAnnouncement(text);
     if (settings.read_aloud) say([text], language);
   }
+
+  async function finish(updated: Order) {
+    setOrder(updated);
+    setStage("done");
+    if (updated.status !== "awaiting_caregiver") {
+      setCaregiver(null);
+      tell(outcomeFor(updated, null, t, language).text);
+      return;
+    }
+    let name = t.shop.yourCaregiver;
+    try {
+      name = (await getOrderStatus(updated.id)).caregiver_name ?? name;
+    } catch {
+      // Keep "your caregiver"; the next check fills the name in.
+    }
+    const who = { name, note: null };
+    setCaregiver(who);
+    tell(outcomeFor(updated, who, t, language).text);
+  }
+
+  // While the caregiver decides, check every 10 seconds; no reload needed.
+  usePolling(
+    () => {
+      if (!order) return;
+      getOrderStatus(order.id)
+        .then((latest) => {
+          const next = latest.order;
+          const who = {
+            name: latest.caregiver_name ?? t.shop.yourCaregiver,
+            note: latest.note,
+          };
+          setCaregiver(who);
+          if (next.status === order.status) return;
+          if (next.status === "awaiting_shopper") {
+            // The payment hold ran out: nothing was paid; confirm again.
+            askToBuy(next, t.shop.expired(who.name));
+            return;
+          }
+          setOrder(next);
+          tell(outcomeFor(next, who, t, language).text);
+        })
+        .catch(() => {
+          // Try again on the next tick.
+        });
+    },
+    stage === "done" && order?.status === "awaiting_caregiver",
+  );
 
   function cancelOrder() {
     setOrder(null);
@@ -311,38 +370,22 @@ export function ShopPage() {
       {stage === "pay" && order && (
         <PayPalCheckout
           order={order}
-          onDone={finish}
+          onDone={(updated) => void finish(updated)}
           onRecheck={recheck}
           onError={setError}
         />
       )}
       {stage === "done" && order && (
-        <section
-          aria-labelledby="result-heading"
-          className="rounded-2xl border-4 border-green-800 p-6 dark:border-green-300"
-        >
-          <h2
-            id="result-heading"
-            ref={resultRef}
-            tabIndex={-1}
-            className="text-3xl font-bold"
-          >
-            {order.status === "captured"
-              ? t.shop.paidHeading
-              : t.shop.approvalHeading}
-          </h2>
-          <p className="mt-2">{resultText(order, t, language)}</p>
-          <button
-            type="button"
-            onClick={() => {
-              setOrder(null);
-              setStage("chat");
-            }}
-            className="mt-4 min-h-16 w-full rounded-2xl border-2 border-blue-800 px-8 text-xl font-semibold focus-visible:outline-4 focus-visible:outline-blue-800 dark:border-blue-300"
-          >
-            {t.shop.shopAgain}
-          </button>
-        </section>
+        <ResultPanel
+          outcome={outcomeFor(order, caregiver, t, language)}
+          headingRef={resultRef}
+          shopAgain={t.shop.shopAgain}
+          onShopAgain={() => {
+            setOrder(null);
+            setCaregiver(null);
+            setStage("chat");
+          }}
+        />
       )}
 
       {stage === "chat" && (
@@ -401,13 +444,101 @@ export function ShopPage() {
   );
 }
 
-function resultText(order: Order, t: Messages, language: Language): string {
+interface Outcome {
+  kind: "paid" | "waiting" | "declined";
+  heading: string;
+  text: string;
+  note?: string;
+}
+
+/** How an order ended (or that it waits), in the shopper's words. */
+function outcomeFor(
+  order: Order,
+  caregiver: { name: string; note: string | null } | null,
+  t: Messages,
+  language: Language,
+): Outcome {
   const amount = money(
     order.confirmed_total ?? order.total,
     order.currency,
     language,
   );
-  return order.status === "captured"
-    ? t.shop.paid(amount, order.title)
-    : t.shop.needsApproval(order.title, amount);
+  const name = caregiver?.name ?? t.shop.yourCaregiver;
+  switch (order.status) {
+    case "awaiting_caregiver":
+      return {
+        kind: "waiting",
+        heading: t.shop.waitingHeading(name),
+        text: t.shop.waiting(order.title, amount, name),
+      };
+    case "voided":
+      return {
+        kind: "declined",
+        heading: t.shop.declinedHeading,
+        text: t.shop.declined(name),
+        note: caregiver?.note
+          ? t.shop.caregiverNote(name, caregiver.note)
+          : undefined,
+      };
+    default:
+      return caregiver
+        ? {
+            kind: "paid",
+            heading: t.shop.approvedHeading,
+            text: t.shop.approved(name, order.title, amount),
+          }
+        : {
+            kind: "paid",
+            heading: t.shop.paidHeading,
+            text: t.shop.paid(amount, order.title),
+          };
+  }
+}
+
+const RESULT_BORDER: Record<Outcome["kind"], string> = {
+  paid: "border-green-800 dark:border-green-300",
+  waiting: "border-amber-700 dark:border-amber-400",
+  declined: "border-neutral-500",
+};
+
+function ResultPanel({
+  outcome,
+  headingRef,
+  shopAgain,
+  onShopAgain,
+}: {
+  outcome: Outcome;
+  headingRef: Ref<HTMLHeadingElement>;
+  shopAgain: string;
+  onShopAgain: () => void;
+}) {
+  return (
+    <section
+      aria-labelledby="result-heading"
+      className={`rounded-2xl border-4 p-6 ${RESULT_BORDER[outcome.kind]}`}
+    >
+      {/* The colour only repeats what the heading says in words. */}
+      <h2
+        id="result-heading"
+        ref={headingRef}
+        tabIndex={-1}
+        className="text-3xl font-bold"
+      >
+        {outcome.heading}
+      </h2>
+      <p className="mt-2">{outcome.text}</p>
+      {outcome.note && (
+        <p dir="auto" className="mt-2 font-semibold">
+          {outcome.note}
+        </p>
+      )}
+      <button
+        type="button"
+        onClick={onShopAgain}
+        className="mt-4 min-h-16 w-full rounded-2xl border-2 border-blue-800 px-8 text-xl font-semibold focus-visible:outline-4 focus-visible:outline-blue-800 dark:border-blue-300"
+      >
+        {shopAgain}
+      </button>
+    </section>
+  );
 }

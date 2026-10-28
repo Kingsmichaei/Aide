@@ -63,6 +63,39 @@ export interface DecisionResult {
   order: Order;
 }
 
+export type AlertKind =
+  "approval_needed" | "approved" | "declined" | "payment_expired";
+
+/** Stored as a kind plus params, so each app words it in its reader's language. */
+export interface AppNotification {
+  id: number;
+  kind: AlertKind;
+  order_id: number | null;
+  params: {
+    title?: string;
+    total?: string;
+    currency?: string;
+    shopper_name?: string;
+    caregiver_name?: string;
+    note?: string | null;
+  };
+  created_at: string;
+  read_at: string | null;
+}
+
+export interface NotificationsResponse {
+  unread: number;
+  items: AppNotification[];
+}
+
+export interface OrderStatusResponse {
+  order: Order;
+  /** Who decides on an over-limit order; null if nobody looks after the shopper. */
+  caregiver_name: string | null;
+  /** The caregiver's note with their latest decision. */
+  note: string | null;
+}
+
 export interface LimitsInput {
   per_order_max: string;
   monthly_max: string;
@@ -265,6 +298,19 @@ export function sendChat(
  * Confirm exactly the order the shopper was shown and read. For a spoken
  * answer, pass the transcript: the server decides whether it was a yes.
  */
+export function getOrderStatus(orderId: number): Promise<OrderStatusResponse> {
+  return request(`/orders/${orderId}`);
+}
+
+export function getNotifications(): Promise<NotificationsResponse> {
+  return request("/notifications");
+}
+
+/** Mark these notifications read, or all of them when `ids` is left out. */
+export function markNotificationsRead(ids?: number[]): Promise<void> {
+  return post("/notifications/read", { ids: ids ?? null });
+}
+
 export function confirmOrder(
   order: Order,
   spoken?: { transcript: string },

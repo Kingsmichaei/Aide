@@ -46,10 +46,20 @@ export const ar: Messages = {
     detailsChanged: "تغيّر شيء ما. من فضلك راجع الطلب مرة أخرى.",
     unavailable: "عذراً، هذا المنتج لم يعد متوفراً.",
     paidHeading: "تم الدفع",
-    approvalHeading: "أُرسل إلى مقدم الرعاية للموافقة",
+    waitingHeading: (name) => `بانتظار موافقة ${name}`,
     paid: (amount, title) => `دفعت ${amount} مقابل ${title}. إنه في الطريق.`,
-    needsApproval: (title, amount) =>
-      `سعر ${title} هو ${amount}. هذا أكثر من حدك، لذلك سيراجعه مقدم الرعاية أولاً. لن تدفع إلا إذا وافق.`,
+    waiting: (title, amount, name) =>
+      `سعر ${title} هو ${amount}. هذا أكثر من حدك، لذلك ستتم مراجعته من ${name} أولاً. لن تدفع إلا بعد الموافقة.`,
+    approvedHeading: "تمت الموافقة، وتم دفع طلبك",
+    approved: (name, title, amount) =>
+      `تمت الموافقة من ${name}. دفعت ${amount} مقابل ${title}. إنه في الطريق.`,
+    declinedHeading: "لم يتم الشراء هذه المرة",
+    declined: (name) =>
+      `لم تتم الموافقة من ${name} هذه المرة، لذلك لم يُدفع شيء. لا بأس. يمكنك أن تطلب مني شيئاً آخر.`,
+    caregiverNote: (name, note) => `رسالة من ${name}: «${note}»`,
+    expired: (name) =>
+      `استغرق الدفع وقتاً طويلاً أثناء انتظار ${name}، لذلك لم يُدفع شيء. من فضلك راجع الطلب وقل نعم مرة أخرى.`,
+    yourCaregiver: "مقدم الرعاية",
     shopAgain: "تسوق شيئاً آخر",
   },
   card: {

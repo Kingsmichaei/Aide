@@ -13,12 +13,14 @@ from app.db import get_session
 from app.deps import get_channel3, get_llm, get_paypal
 from app.main import app
 from app.models import (
+    AlertKind,
     Approval,
     CareLink,
     CareLinkStatus,
     ConfirmationMethod,
     Conversation,
     Decision,
+    Notification,
     Order,
     OrderEvent,
     OrderStatus,
@@ -170,6 +172,13 @@ def approvals_for(session: Session, order: Order) -> list[Approval]:
     return list(session.scalars(select(Approval).where(Approval.order_id == order.id)))
 
 
+def alerts_to(session: Session, user: User) -> list[tuple[AlertKind, str, str | None]]:
+    return [
+        (n.kind, n.params["caregiver_name"], n.params["note"])
+        for n in session.scalars(select(Notification).where(Notification.user_id == user.id))
+    ]
+
+
 def last_event(session: Session, order: Order) -> dict[str, Any]:
     event = session.scalars(
         select(OrderEvent).where(OrderEvent.order_id == order.id).order_by(OrderEvent.id.desc())
@@ -265,6 +274,7 @@ def test_approve_captures_and_records_the_decision(
         "Fine this time",
     )
     assert last_event(session, order)["event"] == "approved_and_captured"
+    assert alerts_to(session, people["rosa"]) == [(AlertKind.approved, "Sam", "Fine this time")]
 
 
 def test_decline_voids_and_keeps_the_note(
@@ -281,6 +291,13 @@ def test_decline_voids_and_keeps_the_note(
     [approval] = approvals_for(session, order)
     assert (approval.decision, approval.note) == (Decision.declined, "We have plenty at home")
     assert last_event(session, order)["note"] == "We have plenty at home"
+    assert alerts_to(session, people["rosa"]) == [
+        (AlertKind.declined, "Sam", "We have plenty at home")
+    ]
+    # The shopper's app shows the note with the decline.
+    sign_in(client, people["rosa"])
+    status = client.get(f"/orders/{order.id}").json()
+    assert (status["order"]["status"], status["note"]) == ("voided", "We have plenty at home")
 
 
 def test_blank_note_is_stored_as_none(
@@ -326,6 +343,7 @@ def test_orders_not_waiting_cannot_be_decided(
     assert decide(client, order, decision).status_code == 409
     assert paypal.calls == []
     assert approvals_for(session, order) == []
+    assert alerts_to(session, people["rosa"]) == []
     assert session.get(Order, order.id).status == status
 
 
@@ -366,6 +384,7 @@ def test_expired_authorization_goes_back_to_the_shopper(
     [approval] = approvals_for(session, order)
     assert approval.decision == Decision.approved
     assert last_event(session, order)["event"] == "authorization_expired"
+    assert alerts_to(session, people["rosa"]) == [(AlertKind.payment_expired, "Sam", None)]
 
     # The shopper can confirm the same order again.
     sign_in(client, people["rosa"])

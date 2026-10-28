@@ -49,11 +49,21 @@ export const en = {
     detailsChanged: "Something changed. Please check the order again.",
     unavailable: "Sorry, this item is not available any more.",
     paidHeading: "Paid",
-    approvalHeading: "Sent to your caregiver for approval",
+    waitingHeading: (name: string) => `Waiting for ${name} to approve`,
     paid: (amount: string, title: string) =>
       `You paid ${amount} for ${title}. It is on its way.`,
-    needsApproval: (title: string, amount: string) =>
-      `${title} costs ${amount}. That is over your limit, so your caregiver will check it first. You only pay if they say yes.`,
+    waiting: (title: string, amount: string, name: string) =>
+      `${title} costs ${amount}. That is over your limit, so ${name} will check it first. You only pay if they say yes.`,
+    approvedHeading: "Approved, your order is paid",
+    approved: (name: string, title: string, amount: string) =>
+      `${name} said yes. You paid ${amount} for ${title}. It is on its way.`,
+    declinedHeading: "Not bought this time",
+    declined: (name: string) =>
+      `${name} said no this time, so nothing was paid. That is okay. You can ask me for something else.`,
+    caregiverNote: (name: string, note: string) => `${name} wrote: “${note}”`,
+    expired: (name: string) =>
+      `The payment took too long while waiting for ${name}, so nothing was paid. Please check the order and say yes again.`,
+    yourCaregiver: "your caregiver",
     shopAgain: "Shop for something else",
   },
   card: {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useId, useState } from "react";
 
 import {
   ApiError,
@@ -7,6 +7,7 @@ import {
   type WaitingOrder,
 } from "../../lib/api";
 import { formatMoney } from "../../lib/format";
+import { usePolling } from "../../lib/usePolling";
 
 type Decision = "approve" | "decline";
 
@@ -26,7 +27,8 @@ export function ApprovalQueue() {
       .catch(() => setLoadFailed(true));
   }, []);
 
-  useEffect(load, [load]);
+  // New over-limit orders appear without a reload.
+  usePolling(load);
 
   async function decide(order: WaitingOrder, decision: Decision, note: string) {
     setProblem(null);

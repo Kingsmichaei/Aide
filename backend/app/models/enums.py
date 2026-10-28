@@ -31,6 +31,13 @@ class ConfirmationMethod(enum.StrEnum):
     button = "button"
 
 
+class AlertKind(enum.StrEnum):
+    approval_needed = "approval_needed"  # to the caregiver: an order is over a limit
+    approved = "approved"  # to the shopper: the caregiver said yes, the order is paid
+    declined = "declined"  # to the shopper: the caregiver said no (maybe with a note)
+    payment_expired = "payment_expired"  # to the shopper: confirm and pay again
+
+
 class Actor(enum.StrEnum):
     shopper = "shopper"
     caregiver = "caregiver"

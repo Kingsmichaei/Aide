@@ -52,11 +52,21 @@ export const fr: Messages = {
       "Quelque chose a changé. Vérifiez à nouveau la commande, s'il vous plaît.",
     unavailable: "Désolé, cet article n'est plus disponible.",
     paidHeading: "Payé",
-    approvalHeading: "Envoyé à votre aidant pour accord",
+    waitingHeading: (name) => `En attente de l'accord de ${name}`,
     paid: (amount, title) =>
       `Vous avez payé ${amount} pour ${title}. C'est en route.`,
-    needsApproval: (title, amount) =>
-      `${title} coûte ${amount}. C'est au-dessus de votre limite, donc votre aidant va d'abord vérifier. Vous ne payez que s'il dit oui.`,
+    waiting: (title, amount, name) =>
+      `${title} coûte ${amount}. C'est au-dessus de votre limite, donc ${name} va d'abord vérifier. Vous ne payez que si la réponse est oui.`,
+    approvedHeading: "Accepté, votre commande est payée",
+    approved: (name, title, amount) =>
+      `${name} a dit oui. Vous avez payé ${amount} pour ${title}. C'est en route.`,
+    declinedHeading: "Pas acheté cette fois",
+    declined: (name) =>
+      `${name} a dit non cette fois, donc rien n'a été payé. Ce n'est pas grave. Vous pouvez me demander autre chose.`,
+    caregiverNote: (name, note) => `${name} a écrit : « ${note} »`,
+    expired: (name) =>
+      `Le paiement a pris trop de temps en attendant ${name}, donc rien n'a été payé. Vérifiez la commande et dites oui à nouveau.`,
+    yourCaregiver: "votre aidant",
     shopAgain: "Acheter autre chose",
   },
   card: {

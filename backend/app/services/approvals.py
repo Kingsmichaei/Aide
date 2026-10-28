@@ -15,7 +15,8 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
-from app.models import Actor, Approval, Decision, Order, OrderStatus, User
+from app.models import Actor, AlertKind, Approval, Decision, Order, OrderStatus, User
+from app.services.alerts import send_alert
 from app.services.orders import record
 from app.services.paypal import AUTHORIZATION_EXPIRED, PayPalClient, PayPalError
 
@@ -40,6 +41,7 @@ async def approve(
         if error.issue != AUTHORIZATION_EXPIRED:
             raise  # PayPal unavailable: nothing changed, the caregiver can try again
         _decide(session, order, caregiver, Decision.approved, note)
+        _tell_shopper(session, order, caregiver, AlertKind.payment_expired, note)
         _send_back_to_shopper(session, order, caregiver)
         session.commit()
         return Outcome.expired
@@ -54,6 +56,7 @@ async def approve(
         caregiver_id=caregiver.id,
         capture_id=capture.id,
     )
+    _tell_shopper(session, order, caregiver, AlertKind.approved, note)
     session.commit()
     return Outcome.captured
 
@@ -78,6 +81,7 @@ async def decline(
         caregiver_id=caregiver.id,
         note=note,
     )
+    _tell_shopper(session, order, caregiver, AlertKind.declined, note)
     session.commit()
     return Outcome.voided
 
@@ -100,6 +104,14 @@ def _decide(
             decided_at=datetime.now(UTC),
         )
     )
+
+
+def _tell_shopper(
+    session: Session, order: Order, caregiver: User, kind: AlertKind, note: str | None
+) -> None:
+    shopper = session.get(User, order.shopper_id)
+    if shopper is not None:
+        send_alert(session, shopper, kind, order, caregiver_name=caregiver.name, note=note)
 
 
 def _send_back_to_shopper(session: Session, order: Order, caregiver: User) -> None:
