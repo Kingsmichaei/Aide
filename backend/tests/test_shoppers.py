@@ -31,24 +31,43 @@ def test_get_returns_defaults(client: TestClient, shopper_id: int) -> None:
     response = client.get(f"/shoppers/{shopper_id}/settings")
 
     assert response.status_code == 200
-    assert response.json() == {"language": "en", "voice_speed": 1.0, "text_size": 20}
+    assert response.json() == {
+        "language": "en",
+        "voice_speed": 1.0,
+        "text_size": 20,
+        "auto_send": True,
+        "read_aloud": True,
+    }
 
 
 def test_patch_updates_only_given_fields(
     client: TestClient, session: Session, shopper_id: int
 ) -> None:
     response = client.patch(
-        f"/shoppers/{shopper_id}/settings", json={"language": "ar", "text_size": 28}
+        f"/shoppers/{shopper_id}/settings",
+        json={"language": "ar", "text_size": 28, "read_aloud": False},
     )
 
-    assert response.json() == {"language": "ar", "voice_speed": 1.0, "text_size": 28}
+    assert response.json() == {
+        "language": "ar",
+        "voice_speed": 1.0,
+        "text_size": 28,
+        "auto_send": True,
+        "read_aloud": False,
+    }
     user = session.get(User, shopper_id)
-    assert (user.language, user.text_size) == ("ar", 28)
+    assert (user.language, user.text_size, user.read_aloud) == ("ar", 28, False)
 
 
 @pytest.mark.parametrize(
     "body",
-    [{"language": "de"}, {"text_size": 18}, {"text_size": 34}, {"voice_speed": 3}],
+    [
+        {"language": "de"},
+        {"text_size": 18},
+        {"text_size": 34},
+        {"voice_speed": 3},
+        {"auto_send": "maybe"},
+    ],
 )
 def test_patch_rejects_out_of_range_values(
     client: TestClient, shopper_id: int, body: dict[str, object]

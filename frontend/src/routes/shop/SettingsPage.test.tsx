@@ -18,6 +18,8 @@ beforeEach(() => {
     language: "es",
     voice_speed: 0.8,
     text_size: 24,
+    auto_send: true,
+    read_aloud: true,
   });
   vi.stubGlobal("speechSynthesis", { speak: speakMock, cancel: cancelMock });
   vi.stubGlobal(
@@ -68,6 +70,8 @@ describe("SettingsPage", () => {
       language: "es",
       voice_speed: 0.8,
       text_size: 32,
+      auto_send: true,
+      read_aloud: true,
     });
     renderSettings();
     await waitFor(() =>

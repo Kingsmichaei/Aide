@@ -51,6 +51,8 @@ export interface ShopperSettings {
   language: Language;
   voice_speed: number;
   text_size: number;
+  auto_send: boolean;
+  read_aloud: boolean;
 }
 
 export interface ChatResponse {

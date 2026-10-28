@@ -6,6 +6,8 @@ export const DEFAULT_SETTINGS: ShopperSettings = {
   language: "en",
   voice_speed: 1,
   text_size: 20,
+  auto_send: true,
+  read_aloud: true,
 };
 
 export interface SettingsValue {

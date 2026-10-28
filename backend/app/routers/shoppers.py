@@ -18,12 +18,16 @@ class Settings(BaseModel):
     language: Language
     voice_speed: VoiceSpeed
     text_size: TextSize
+    auto_send: bool
+    read_aloud: bool
 
 
 class SettingsPatch(BaseModel):
     language: Language | None = None
     voice_speed: VoiceSpeed | None = None
     text_size: TextSize | None = None
+    auto_send: bool | None = None
+    read_aloud: bool | None = None
 
 
 @router.get("/{shopper_id}/settings")
@@ -54,4 +58,6 @@ def _settings(shopper: User) -> Settings:
         language=shopper.language,  # type: ignore[arg-type]
         voice_speed=shopper.voice_speed,
         text_size=shopper.text_size,
+        auto_send=shopper.auto_send,
+        read_aloud=shopper.read_aloud,
     )
