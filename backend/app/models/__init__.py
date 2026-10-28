@@ -1,7 +1,14 @@
 from app.models.approval import Approval
 from app.models.care_link import CareLink
 from app.models.conversation import Conversation
-from app.models.enums import Actor, CareLinkStatus, Decision, OrderStatus, Role
+from app.models.enums import (
+    Actor,
+    CareLinkStatus,
+    ConfirmationMethod,
+    Decision,
+    OrderStatus,
+    Role,
+)
 from app.models.limit import Limit
 from app.models.order import Order
 from app.models.order_event import OrderEvent
@@ -13,6 +20,7 @@ __all__ = [
     "Approval",
     "CareLink",
     "CareLinkStatus",
+    "ConfirmationMethod",
     "Conversation",
     "Decision",
     "Limit",

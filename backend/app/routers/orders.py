@@ -8,14 +8,14 @@ from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
 from app.db import get_session
 from app.deps import get_channel3, get_paypal
-from app.models import Actor, Order, OrderStatus, Role, User
+from app.models import Actor, ConfirmationMethod, Order, OrderStatus, Role, User
 from app.schemas import OrderOut
-from app.services import limits
+from app.services import consent, limits
 from app.services.channel3 import Channel3Client, Channel3Error
 from app.services.orders import (
     RecheckResult,
@@ -41,12 +41,23 @@ class DraftIn(BaseModel):
 
 
 class ConfirmIn(BaseModel):
-    """Exactly what the shopper was shown when they said yes."""
+    """Exactly what the shopper was shown (and read) when they said yes."""
 
     title: str
     price: Decimal
     currency: str
     total: Decimal
+    method: ConfirmationMethod = ConfirmationMethod.button
+    # Required for voice: the server, not the browser, decides if it was a yes.
+    transcript: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def voice_needs_transcript(self) -> "ConfirmIn":
+        if self.method == ConfirmationMethod.voice and not (self.transcript or "").strip():
+            raise ValueError("A voice confirmation needs the transcript")
+        if self.method == ConfirmationMethod.button:
+            self.transcript = None
+        return self
 
 
 class ConfirmOut(BaseModel):
@@ -86,6 +97,16 @@ async def confirm(
     if order.status != OrderStatus.draft:
         raise HTTPException(status.HTTP_409_CONFLICT, f"Order is {order.status}, not a draft")
 
+    if body.method == ConfirmationMethod.voice:
+        answer = consent.classify(body.transcript or "")
+        if answer != "yes":
+            # Not a yes: nothing changes. "no" lets the app drop the order; anything
+            # else means Aide answers or asks again.
+            record(session, order, Actor.shopper, f"voice_{answer}", transcript=body.transcript)
+            session.commit()
+            reason = "declined" if answer == "no" else "unclear"
+            return ConfirmOut(confirmed=False, reason=reason, order=OrderOut.of(order))
+
     shown = (body.title, body.price, body.currency, body.total)
     if shown != (order.title, order.price, order.currency, total(order)):
         return ConfirmOut(confirmed=False, reason="details_changed", order=OrderOut.of(order))
@@ -96,6 +117,8 @@ async def confirm(
 
     order.confirmed_total = body.total
     order.confirmed_at = datetime.now(UTC)
+    order.confirmation_method = body.method
+    order.confirmation_transcript = body.transcript
     record(
         session,
         order,
@@ -105,6 +128,8 @@ async def confirm(
         price=body.price,
         currency=body.currency,
         total=body.total,
+        method=body.method,
+        transcript=body.transcript,
     )
     session.commit()
     return ConfirmOut(confirmed=True, order=OrderOut.of(order))

@@ -43,6 +43,7 @@ export interface Order {
   total: string;
   confirmed_total: string | null;
   confirmed_at: string | null;
+  confirmation_method: "voice" | "button" | null;
   paypal_order_id: string | null;
   status_changed_at: string;
 }
@@ -67,7 +68,13 @@ export interface ChatResponse {
 }
 
 export type ConfirmReason =
-  "details_changed" | "price_changed" | "retailer_changed" | "unavailable";
+  | "details_changed"
+  | "price_changed"
+  | "retailer_changed"
+  | "unavailable"
+  // Voice only: the server did not hear an explicit yes.
+  | "declined"
+  | "unclear";
 
 export interface ConfirmResponse {
   confirmed: boolean;
@@ -132,9 +139,23 @@ export function sendChat(
 }
 
 /** Send exactly what the shopper saw; the server refuses if anything changed. */
-export function confirmOrder(order: Order): Promise<ConfirmResponse> {
+/**
+ * Confirm exactly the order the shopper was shown and read. For a spoken
+ * answer, pass the transcript: the server decides whether it was a yes.
+ */
+export function confirmOrder(
+  order: Order,
+  spoken?: { transcript: string },
+): Promise<ConfirmResponse> {
   const { title, price, currency, total } = order;
-  return post(`/orders/${order.id}/confirm`, { title, price, currency, total });
+  return post(`/orders/${order.id}/confirm`, {
+    title,
+    price,
+    currency,
+    total,
+    method: spoken ? "voice" : "button",
+    transcript: spoken?.transcript ?? null,
+  });
 }
 
 export function createPayPalOrder(

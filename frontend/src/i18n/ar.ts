@@ -59,6 +59,12 @@ export const ar: Messages = {
     yes: "نعم، اشترِه",
     checking: "جارٍ التحقق من السعر…",
     no: "لا، ليس هذا",
+    readBack: (title, retailer, total) =>
+      `${title}، من ${retailer}. المجموع مع التوصيل ${total}.`,
+    ask: "هل أشتريه؟",
+    hint: "قل نعم أو لا، أو اضغط زراً.",
+    unclear: "عذراً، أحتاج إلى نعم أو لا بوضوح.",
+    youSaid: (text) => `قلت: ${text}`,
   },
   paypal: {
     heading: (amount) => `ادفع ${amount} عبر PayPal`,

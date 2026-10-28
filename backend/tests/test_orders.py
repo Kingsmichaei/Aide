@@ -274,3 +274,123 @@ def test_draft_unknown_product_is_404(client: TestClient, shopper_id: int) -> No
     )
 
     assert response.status_code == 404
+
+
+def say(client: TestClient, order: dict[str, Any], transcript: str) -> dict[str, Any]:
+    shown = {k: order[k] for k in ("title", "price", "currency", "total")}
+    response = client.post(
+        f"/orders/{order['id']}/confirm",
+        json={**shown, "method": "voice", "transcript": transcript},
+    )
+    assert response.status_code == 200
+    return response.json()
+
+
+@pytest.mark.parametrize("transcript", ["Yes, please.", "Sí, cómpralo", "Oui !", "نعم"])
+def test_voice_yes_confirms_and_stores_the_words(
+    client: TestClient, session: Session, shopper_id: int, transcript: str
+) -> None:
+    order = draft(client, shopper_id)
+
+    result = say(client, order, transcript)
+
+    assert result["confirmed"] is True
+    assert result["order"]["confirmation_method"] == "voice"
+    stored = session.get(Order, order["id"])
+    assert stored.confirmed_total == Decimal("39.99")
+    assert stored.confirmation_transcript == transcript
+    event = session.scalars(
+        select(OrderEvent).where(OrderEvent.order_id == order["id"]).order_by(OrderEvent.id)
+    ).all()[-1]
+    assert event.detail["event"] == "confirmed"
+    assert event.detail["method"] == "voice"
+    assert event.detail["transcript"] == transcript
+
+
+def test_voice_no_declines_without_confirming(
+    client: TestClient, session: Session, shopper_id: int
+) -> None:
+    order = draft(client, shopper_id)
+
+    result = say(client, order, "No, gracias")
+
+    assert result == {**result, "confirmed": False, "reason": "declined"}
+    assert session.get(Order, order["id"]).confirmed_total is None
+    assert events(session, order["id"])[-1] == "voice_no"
+
+
+@pytest.mark.parametrize("transcript", ["maybe", "how much again?", "yes, how much again?"])
+def test_unclear_answer_confirms_nothing(
+    client: TestClient, session: Session, shopper_id: int, transcript: str
+) -> None:
+    order = draft(client, shopper_id)
+
+    result = say(client, order, transcript)
+
+    assert result["confirmed"] is False
+    assert result["reason"] == "unclear"
+    stored = session.get(Order, order["id"])
+    assert (stored.confirmed_total, stored.confirmation_method) == (None, None)
+    assert events(session, order["id"])[-1] == "voice_unclear"
+
+
+def test_voice_yes_after_a_price_change_asks_again(
+    client: TestClient, session: Session, channel3: FakeChannel3, shopper_id: int
+) -> None:
+    order = draft(client, shopper_id)  # Aide read back $39.99
+    channel3.price = Decimal("45.00")  # then the store raised the price
+
+    result = say(client, order, "yes")
+
+    assert result["confirmed"] is False
+    assert result["reason"] == "price_changed"
+    assert result["order"]["total"] == "45.00"  # the new total to read back
+    assert session.get(Order, order["id"]).confirmation_method is None
+
+
+def test_voice_yes_for_details_that_were_not_read_is_refused(
+    client: TestClient, shopper_id: int
+) -> None:
+    order = draft(client, shopper_id)
+
+    result = say(client, {**order, "total": "29.99"}, "yes")
+
+    assert result["reason"] == "details_changed"
+
+
+def test_voice_needs_a_transcript(client: TestClient, shopper_id: int) -> None:
+    order = draft(client, shopper_id)
+    shown = {k: order[k] for k in ("title", "price", "currency", "total")}
+
+    response = client.post(
+        f"/orders/{order['id']}/confirm", json={**shown, "method": "voice", "transcript": " "}
+    )
+
+    assert response.status_code == 422
+
+
+def test_button_confirmation_is_recorded_without_a_transcript(
+    client: TestClient, session: Session, shopper_id: int
+) -> None:
+    order = draft(client, shopper_id)
+    shown = {k: order[k] for k in ("title", "price", "currency", "total")}
+
+    response = client.post(
+        f"/orders/{order['id']}/confirm", json={**shown, "transcript": "ignored"}
+    )
+
+    assert response.json()["order"]["confirmation_method"] == "button"
+    assert session.get(Order, order["id"]).confirmation_transcript is None
+
+
+def test_paypal_recheck_clears_the_confirmation_method(
+    client: TestClient, session: Session, channel3: FakeChannel3, shopper_id: int
+) -> None:
+    order = draft(client, shopper_id)
+    say(client, order, "yes")
+    channel3.price = Decimal("50.00")
+
+    client.post(f"/orders/{order['id']}/paypal")
+
+    stored = session.get(Order, order["id"])
+    assert (stored.confirmation_method, stored.confirmation_transcript) == (None, None)

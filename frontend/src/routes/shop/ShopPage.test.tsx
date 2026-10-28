@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../../lib/api";
 import type { PayPalSessionCallbacks } from "../../lib/paypal";
+import { MESSAGES } from "../../i18n";
 import { DEFAULT_SETTINGS, SettingsContext } from "../../lib/settings-context";
 import { FakeRecognition } from "../../test/fakeSpeech";
 import { ShopPage } from "./ShopPage";
@@ -68,6 +69,7 @@ const draftOrder: api.Order = {
   total: "29.99",
   confirmed_total: null,
   confirmed_at: null,
+  confirmation_method: null,
   paypal_order_id: null,
   status_changed_at: "2026-10-27T00:00:00Z",
 };
@@ -163,7 +165,7 @@ describe("ShopPage", () => {
     await chooseAndConfirm();
 
     fireEvent.click(screen.getByRole("button", { name: "Yes, buy it" }));
-    expect(api.confirmOrder).toHaveBeenCalledWith(draftOrder);
+    expect(api.confirmOrder).toHaveBeenCalledWith(draftOrder, undefined);
     await screen.findByRole("heading", { name: /Pay \$29\.99 with PayPal/ });
 
     const paypalButton = await waitFor(() => {
@@ -539,5 +541,202 @@ describe("Voice and languages", () => {
     expect(
       screen.queryByRole("button", { name: /from now on|à partir/ }),
     ).not.toBeInTheDocument();
+  });
+
+  describe("voice confirmation", () => {
+    /** Search, choose the kettle, and land on "Check your order". */
+    async function reachConfirm(language: api.Language = "en") {
+      vi.mocked(api.sendChat).mockReset();
+      vi.mocked(api.sendChat)
+        .mockResolvedValueOnce({
+          conversation_id: 1,
+          reply: "Found it.",
+          products: [kettle],
+          draft_order: null,
+          reply_language: null,
+        })
+        .mockResolvedValueOnce({
+          conversation_id: 1,
+          reply: "The model's own wording of the price.",
+          products: [],
+          draft_order: draftOrder,
+          reply_language: null,
+        });
+      renderWith({ language });
+      fireEvent.change(screen.getByRole("textbox"), {
+        target: { value: "kettle" },
+      });
+      fireEvent.submit(
+        screen.getByRole("textbox").closest("form") as HTMLFormElement,
+      );
+      const card = await screen.findByRole("article", { name: "Blue kettle" });
+      speakMock.mockClear();
+      fireEvent.click(within(card).getByRole("button"));
+      return screen.findByRole("region", {
+        name: MESSAGES[language].confirm.heading,
+      });
+    }
+
+    function answer(panel: HTMLElement, words: string) {
+      fireEvent.click(
+        within(panel).getByRole("button", {
+          name: /Talk to Aide|Hablar con Aide/,
+        }),
+      );
+      const recognition = FakeRecognition.last;
+      if (!recognition) throw new Error("not listening");
+      act(() => {
+        recognition.hear([words, true]);
+        recognition.end();
+      });
+    }
+
+    it("reads back item, store and full total, then asks", async () => {
+      const panel = await reachConfirm();
+
+      expect(spoken().map((u) => u.text)).toEqual([
+        "Blue kettle, from target.com. The total, with delivery, is $29.99.",
+        "Shall I buy it?",
+      ]);
+      // The panel shows the same words, and the Yes button is there throughout.
+      expect(
+        within(panel).getByText(
+          "Blue kettle, from target.com. The total, with delivery, is $29.99.",
+        ),
+      ).toBeVisible();
+      expect(within(panel).getByText("Shall I buy it?")).toBeVisible();
+      expect(
+        within(panel).getByRole("button", { name: "Yes, buy it" }),
+      ).toBeVisible();
+    });
+
+    it("asks in the shopper's language", async () => {
+      await reachConfirm("es");
+
+      expect(spoken().map((u) => [u.lang, u.text])).toEqual([
+        [
+          "es-ES",
+          expect.stringMatching(
+            /^Blue kettle, de target\.com\. El total, con envío, es 29,99\sUS\$\.$/,
+          ),
+        ],
+        ["es-ES", "¿Lo compro?"],
+      ]);
+    });
+
+    it("a spoken yes sends the read-back figures and the words", async () => {
+      vi.mocked(api.confirmOrder).mockResolvedValue({
+        confirmed: true,
+        reason: null,
+        order: { ...confirmed, confirmation_method: "voice" },
+      });
+      const panel = await reachConfirm();
+
+      answer(panel, "Yes please");
+
+      await waitFor(() =>
+        expect(api.confirmOrder).toHaveBeenCalledWith(draftOrder, {
+          transcript: "Yes please",
+        }),
+      );
+      expect(
+        await screen.findByRole("heading", {
+          name: /Pay \$29\.99 with PayPal/,
+        }),
+      ).toBeVisible();
+    });
+
+    it("keeps the Yes button visible while listening", async () => {
+      const panel = await reachConfirm();
+
+      fireEvent.click(
+        within(panel).getByRole("button", { name: "Talk to Aide" }),
+      );
+      act(() => {
+        FakeRecognition.last?.hear(["ye", false]);
+      });
+
+      expect(
+        within(panel).getByRole("button", { name: "Yes, buy it" }),
+      ).toBeVisible();
+      expect(within(panel).getByText("You said: ye")).toBeVisible();
+    });
+
+    it("a spoken no buys nothing and goes back to the chat", async () => {
+      vi.mocked(api.confirmOrder).mockResolvedValue({
+        confirmed: false,
+        reason: "declined",
+        order: draftOrder,
+      });
+      const panel = await reachConfirm();
+
+      answer(panel, "no thanks");
+
+      expect(
+        await conversation().findByText(/Nothing was bought/),
+      ).toBeVisible();
+      expect(
+        screen.queryByRole("region", { name: "Check your order" }),
+      ).not.toBeInTheDocument();
+      expect(api.createPayPalOrder).not.toHaveBeenCalled();
+    });
+
+    it("an unclear answer is not a yes: Aide asks again", async () => {
+      vi.mocked(api.confirmOrder).mockResolvedValue({
+        confirmed: false,
+        reason: "unclear",
+        order: draftOrder,
+      });
+      const panel = await reachConfirm();
+      speakMock.mockClear();
+
+      answer(panel, "how much again?");
+
+      await waitFor(() =>
+        expect(spoken().map((u) => u.text)).toEqual([
+          "Sorry, I need a clear yes or no.",
+          "Blue kettle, from target.com. The total, with delivery, is $29.99.",
+          "Shall I buy it?",
+        ]),
+      );
+      expect(screen.getByRole("button", { name: "Yes, buy it" })).toBeVisible();
+      expect(api.createPayPalOrder).not.toHaveBeenCalled();
+    });
+
+    it("a price change after the read-back reads the new total and asks again", async () => {
+      const newer = { ...draftOrder, price: "34.00", total: "34.00" };
+      vi.mocked(api.confirmOrder)
+        .mockResolvedValueOnce({
+          confirmed: false,
+          reason: "price_changed",
+          order: newer,
+        })
+        .mockResolvedValueOnce({
+          confirmed: true,
+          reason: null,
+          order: { ...newer, confirmed_total: "34.00" },
+        });
+      const panel = await reachConfirm();
+      speakMock.mockClear();
+
+      answer(panel, "yes");
+
+      await waitFor(() =>
+        expect(spoken().map((u) => u.text)).toEqual([
+          "The price changed. It is now $34.00. Please check again.",
+          "Blue kettle, from target.com. The total, with delivery, is $34.00.",
+          "Shall I buy it?",
+        ]),
+      );
+      expect(api.createPayPalOrder).not.toHaveBeenCalled();
+
+      // The next yes is for the new figures, not the old ones.
+      answer(screen.getByRole("region", { name: "Check your order" }), "yes");
+      await waitFor(() =>
+        expect(api.confirmOrder).toHaveBeenLastCalledWith(newer, {
+          transcript: "yes",
+        }),
+      );
+    });
   });
 });

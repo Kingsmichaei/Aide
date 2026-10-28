@@ -12,6 +12,8 @@ import {
 interface Props {
   language: Language;
   disabled: boolean;
+  /** Outlined, for screens where another button is the main action. */
+  secondary?: boolean;
   /** The transcript so far, as the shopper speaks. */
   onHeard: (text: string) => void;
   /** Listening has ended and something was heard. */
@@ -27,6 +29,7 @@ interface Props {
 export function TalkButton({
   language,
   disabled,
+  secondary = false,
   onHeard,
   onFinished,
   onError,
@@ -75,7 +78,11 @@ export function TalkButton({
           if (session.current) session.current.stop();
           else start();
         }}
-        className="flex min-h-20 items-center justify-center gap-4 rounded-2xl bg-blue-800 px-8 text-2xl font-semibold text-white hover:bg-blue-900 focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-blue-800 disabled:opacity-60 dark:focus-visible:outline-blue-300"
+        className={`flex items-center justify-center gap-4 rounded-2xl px-8 text-2xl font-semibold focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-blue-800 disabled:opacity-60 dark:focus-visible:outline-blue-300 ${
+          secondary
+            ? "min-h-16 border-2 border-blue-800 hover:bg-blue-50 dark:border-blue-300 dark:hover:bg-blue-950"
+            : "min-h-20 bg-blue-800 text-white hover:bg-blue-900"
+        }`}
       >
         {listening && (
           <span

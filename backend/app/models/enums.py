@@ -26,6 +26,11 @@ class Decision(enum.StrEnum):
     declined = "declined"
 
 
+class ConfirmationMethod(enum.StrEnum):
+    voice = "voice"
+    button = "button"
+
+
 class Actor(enum.StrEnum):
     shopper = "shopper"
     caregiver = "caregiver"

@@ -62,6 +62,12 @@ export const en = {
     yes: "Yes, buy it",
     checking: "Checking the price…",
     no: "No, not this one",
+    readBack: (title: string, retailer: string, total: string) =>
+      `${title}, from ${retailer}. The total, with delivery, is ${total}.`,
+    ask: "Shall I buy it?",
+    hint: "Say yes or no, or press a button.",
+    unclear: "Sorry, I need a clear yes or no.",
+    youSaid: (text: string) => `You said: ${text}`,
   },
   paypal: {
     heading: (amount: string) => `Pay ${amount} with PayPal`,

@@ -109,6 +109,8 @@ def apply_new_offer(
         order.price, order.currency, order.retailer = offer.price, offer.currency, offer.retailer
     order.confirmed_total = None
     order.confirmed_at = None
+    order.confirmation_method = None
+    order.confirmation_transcript = None
     record(session, order, Actor.system, result.value, OrderStatus.draft, old=old, new=offer)
 
 

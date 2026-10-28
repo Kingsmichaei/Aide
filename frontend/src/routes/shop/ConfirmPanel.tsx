@@ -1,19 +1,32 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 import { useI18n } from "../../i18n/useI18n";
 import type { Order } from "../../lib/api";
+import { readBack } from "../../lib/readout";
 
 interface Props {
   order: Order;
   busy: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  /** The shopper's last spoken answer, shown so they can see what Aide heard. */
+  heard: string | null;
+  /** The Talk to Aide button, when the browser can listen. */
+  voice?: ReactNode;
 }
 
-export function ConfirmPanel({ order, busy, onConfirm, onCancel }: Props) {
-  const { t, money } = useI18n();
+export function ConfirmPanel({
+  order,
+  busy,
+  onConfirm,
+  onCancel,
+  heard,
+  voice,
+}: Props) {
+  const { t, money, language } = useI18n();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const delivery = (Number(order.total) - Number(order.price)).toFixed(2);
+  const [summary, question] = readBack(order, language);
 
   useEffect(() => {
     headingRef.current?.focus();
@@ -46,6 +59,10 @@ export function ConfirmPanel({ order, busy, onConfirm, onCancel }: Props) {
           {money(order.total, order.currency)}
         </dd>
       </dl>
+      {/* The same words Aide says aloud. */}
+      <p>{summary}</p>
+      <p className="text-2xl font-bold">{question}</p>
+      {/* Always visible, whether or not the shopper answers by voice. */}
       <button
         type="button"
         onClick={onConfirm}
@@ -54,6 +71,17 @@ export function ConfirmPanel({ order, busy, onConfirm, onCancel }: Props) {
       >
         {busy ? t.confirm.checking : t.confirm.yes}
       </button>
+      {voice && (
+        <>
+          <p>{t.confirm.hint}</p>
+          {voice}
+        </>
+      )}
+      {heard && (
+        <p dir="auto" className="font-semibold">
+          {t.confirm.youSaid(heard)}
+        </p>
+      )}
       <button
         type="button"
         onClick={onCancel}

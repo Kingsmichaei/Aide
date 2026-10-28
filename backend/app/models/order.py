@@ -1,11 +1,11 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Numeric, String, func
+from sqlalchemy import DateTime, Enum, ForeignKey, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
-from app.models.enums import OrderStatus
+from app.models.enums import ConfirmationMethod, OrderStatus
 
 
 class Order(Base):
@@ -20,6 +20,11 @@ class Order(Base):
     currency: Mapped[str] = mapped_column(String(3))
     confirmed_total: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    confirmation_method: Mapped[ConfirmationMethod | None] = mapped_column(
+        Enum(ConfirmationMethod, native_enum=False, create_constraint=True)
+    )
+    # What the shopper said when they confirmed by voice, word for word.
+    confirmation_transcript: Mapped[str | None] = mapped_column(Text)
     paypal_order_id: Mapped[str | None] = mapped_column(String(64), unique=True)
     paypal_auth_id: Mapped[str | None] = mapped_column(String(64), unique=True)
     status: Mapped[OrderStatus] = mapped_column(

@@ -59,6 +59,12 @@ export const es: Messages = {
     yes: "Sí, comprarlo",
     checking: "Revisando el precio…",
     no: "No, este no",
+    readBack: (title, retailer, total) =>
+      `${title}, de ${retailer}. El total, con envío, es ${total}.`,
+    ask: "¿Lo compro?",
+    hint: "Diga sí o no, o pulse un botón.",
+    unclear: "Perdone, necesito un sí o un no claro.",
+    youSaid: (text) => `Usted dijo: ${text}`,
   },
   paypal: {
     heading: (amount) => `Pagar ${amount} con PayPal`,

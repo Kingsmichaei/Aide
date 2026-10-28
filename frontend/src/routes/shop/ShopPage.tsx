@@ -11,7 +11,7 @@ import {
   type Product,
 } from "../../lib/api";
 import { demoShopperId } from "../../lib/config";
-import { replyChunks } from "../../lib/readout";
+import { readBack, replyChunks } from "../../lib/readout";
 import { useSettings } from "../../lib/settings-context";
 import {
   canListen,
@@ -27,8 +27,9 @@ import { TalkButton } from "./TalkButton";
 
 type Stage = "chat" | "confirm" | "pay" | "done";
 
+/** Why the order changed since the shopper last heard it. */
 function recheckText(
-  reason: ConfirmReason,
+  reason: Exclude<ConfirmReason, "declined" | "unclear">,
   order: Order,
   language: Language,
 ): string {
@@ -60,6 +61,8 @@ export function ShopPage() {
   const [order, setOrder] = useState<Order | null>(null);
   const [announcement, setAnnouncement] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // The shopper's last spoken answer to "Shall I buy it?".
+  const [heard, setHeard] = useState<string | null>(null);
   // Set when Aide answered in a different language from the shopper's setting.
   const [suggestedLanguage, setSuggestedLanguage] = useState<Language | null>(
     null,
@@ -77,6 +80,7 @@ export function ShopPage() {
     text: string,
     products: Product[] = [],
     inLanguage: Language = language,
+    { silent = false } = {},
   ) {
     const message = {
       id: nextId.current++,
@@ -86,10 +90,24 @@ export function ShopPage() {
       language: inLanguage,
     };
     setMessages((current) => [...current, message]);
-    if (from === "aide") {
+    if (from === "aide" && !silent) {
       setAnnouncement(text);
       if (settings.read_aloud) sayMessage(message);
     }
+  }
+
+  /**
+   * Read back the item, store and full total, then ask "Shall I buy it?". Used
+   * every time the order is shown or changes, so a yes is always a yes to the
+   * figures the shopper just heard. `lead` explains why we are asking again.
+   */
+  function askToBuy(toBuy: Order, lead?: string) {
+    const pieces = [...(lead ? [lead] : []), ...readBack(toBuy, language)];
+    setOrder(toBuy);
+    setStage("confirm");
+    setHeard(null);
+    setAnnouncement(pieces.join(" "));
+    if (settings.read_aloud) say(pieces, language);
   }
 
   function say(pieces: string[], inLanguage: Language, slowly = false) {
@@ -114,16 +132,17 @@ export function ShopPage() {
     try {
       const response = await sendChat(shopperId, message);
       setSuggestedLanguage(response.reply_language);
+      const draftOrder = response.draft_order;
+      // With a draft, Aide speaks the read-back built from the order itself,
+      // not the model's wording of it.
       addMessage(
         "aide",
         response.reply,
         response.products,
         response.reply_language ?? language,
+        { silent: draftOrder !== null },
       );
-      if (response.draft_order) {
-        setOrder(response.draft_order);
-        setStage("confirm");
-      }
+      if (draftOrder) askToBuy(draftOrder);
     } catch {
       setError(t.shop.answerFailed);
     } finally {
@@ -172,18 +191,29 @@ export function ShopPage() {
     }
   }
 
-  async function confirm() {
+  async function confirm(spoken?: { transcript: string }) {
     if (!order) return;
     setBusy(true);
     setError(null);
     try {
-      const result = await confirmOrder(order);
-      setOrder(result.order);
+      // Sends exactly the order that was read back; the server re-checks it.
+      const result = await confirmOrder(order, spoken);
       if (result.confirmed) {
+        setOrder(result.order);
         setStage("pay");
+      } else if (result.reason === "declined") {
+        cancelOrder();
+      } else if (result.reason === "unclear") {
+        addMessage("aide", t.confirm.unclear, [], language, { silent: true });
+        askToBuy(result.order, t.confirm.unclear);
+      } else if (result.reason === "unavailable") {
+        setOrder(null);
+        setStage("chat");
+        addMessage("aide", recheckText("unavailable", result.order, language));
       } else if (result.reason) {
-        addMessage("aide", recheckText(result.reason, result.order, language));
-        if (result.reason === "unavailable") setStage("chat");
+        const why = recheckText(result.reason, result.order, language);
+        addMessage("aide", why, [], language, { silent: true });
+        askToBuy(result.order, why);
       }
     } catch {
       setError(t.shop.checkFailed);
@@ -193,9 +223,9 @@ export function ShopPage() {
   }
 
   function recheck(updated: Order) {
-    setOrder(updated);
-    setStage("confirm");
-    addMessage("aide", recheckText("price_changed", updated, language));
+    const why = recheckText("price_changed", updated, language);
+    addMessage("aide", why, [], language, { silent: true });
+    askToBuy(updated, why);
   }
 
   function finish(updated: Order) {
@@ -208,6 +238,7 @@ export function ShopPage() {
 
   function cancelOrder() {
     setOrder(null);
+    setHeard(null);
     setStage("chat");
     addMessage("aide", t.shop.nothingBought);
   }
@@ -257,8 +288,24 @@ export function ShopPage() {
         <ConfirmPanel
           order={order}
           busy={busy}
-          onConfirm={confirm}
+          onConfirm={() => void confirm()}
           onCancel={cancelOrder}
+          heard={heard}
+          voice={
+            voiceInput && (
+              <TalkButton
+                language={language}
+                disabled={busy}
+                secondary
+                onHeard={setHeard}
+                onFinished={(transcript) => {
+                  addMessage("shopper", transcript);
+                  void confirm({ transcript });
+                }}
+                onError={listenFailed}
+              />
+            )
+          }
         />
       )}
       {stage === "pay" && order && (
