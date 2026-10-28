@@ -38,6 +38,31 @@ export interface Limits {
   blocked_categories: Category[];
 }
 
+export interface WaitingOrder {
+  order_id: number;
+  shopper: CaredForShopper;
+  title: string;
+  retailer: string;
+  price: string;
+  total: string;
+  currency: string;
+  confirmation_method: "voice" | "button" | null;
+  /** What the shopper said when they confirmed by voice. */
+  confirmation_transcript: string | null;
+  waiting_since: string;
+  /** One sentence written by the AI from the order's facts. */
+  summary: string;
+}
+
+export type DecisionOutcome = "captured" | "voided" | "expired";
+
+export interface DecisionResult {
+  outcome: DecisionOutcome;
+  /** Plain words for the caregiver about what happened. */
+  message: string;
+  order: Order;
+}
+
 export interface LimitsInput {
   per_order_max: string;
   monthly_max: string;
@@ -204,6 +229,18 @@ export function getCaredForShoppers(): Promise<CaredForShopper[]> {
 export function getCategories(query = ""): Promise<Category[]> {
   const search = query ? `?query=${encodeURIComponent(query)}` : "";
   return request(`/care/categories${search}`);
+}
+
+export function getApprovals(): Promise<WaitingOrder[]> {
+  return request("/care/approvals");
+}
+
+export function decideApproval(
+  orderId: number,
+  decision: "approve" | "decline",
+  note: string,
+): Promise<DecisionResult> {
+  return post(`/care/approvals/${orderId}`, { decision, note: note || null });
 }
 
 export function getLimits(shopperId: number): Promise<Limits> {

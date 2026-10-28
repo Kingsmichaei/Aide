@@ -104,17 +104,26 @@ def require_caregiver(user: CurrentUser) -> User:
 Caregiver = Annotated[User, Depends(require_caregiver)]
 
 
-def cared_for_shopper(shopper_id: int, caregiver: Caregiver, session: SessionDep) -> User:
-    """The shopper in the path, if this caregiver has an active link to them."""
-    link = session.scalar(
-        select(CareLink).where(
-            CareLink.shopper_id == shopper_id,
-            CareLink.caregiver_id == caregiver.id,
-            CareLink.status == CareLinkStatus.active,
+def linked_shopper_ids(session: Session, caregiver: User) -> set[int]:
+    """Shoppers this caregiver has an active care link to."""
+    return set(
+        session.scalars(
+            select(CareLink.shopper_id).where(
+                CareLink.caregiver_id == caregiver.id,
+                CareLink.status == CareLinkStatus.active,
+            )
         )
     )
-    if link is None:
+
+
+def check_looks_after(session: Session, caregiver: User, shopper_id: int) -> None:
+    if shopper_id not in linked_shopper_ids(session, caregiver):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "You do not look after this shopper")
+
+
+def cared_for_shopper(shopper_id: int, caregiver: Caregiver, session: SessionDep) -> User:
+    """The shopper in the path, if this caregiver has an active link to them."""
+    check_looks_after(session, caregiver, shopper_id)
     shopper = session.get(User, shopper_id)
     assert shopper is not None  # the link's foreign key guarantees it
     return shopper

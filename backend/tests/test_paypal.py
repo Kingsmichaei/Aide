@@ -5,7 +5,12 @@ import httpx
 import pytest
 
 from app.models import Order
-from app.services.paypal import SANDBOX_URL, PayPalClient, PayPalError
+from app.services.paypal import (
+    AUTHORIZATION_EXPIRED,
+    SANDBOX_URL,
+    PayPalClient,
+    PayPalError,
+)
 
 pytestmark = pytest.mark.anyio
 
@@ -53,6 +58,15 @@ class FakePayPal:
             return httpx.Response(201, json={"id": "CAP-1", "status": "COMPLETED"})
         if path == "/v2/payments/authorizations/AUTH-1/void":
             return httpx.Response(204)
+        if path == "/v2/payments/authorizations/AUTH-OLD/capture":
+            # The example PayPal's spec gives for capturing an expired authorization.
+            return httpx.Response(
+                422,
+                json={
+                    "name": "UNPROCESSABLE_ENTITY",
+                    "details": [{"issue": "AUTHORIZATION_EXPIRED", "description": "expired"}],
+                },
+            )
         return httpx.Response(404, json={"name": "RESOURCE_NOT_FOUND"})
 
     def api_requests(self) -> list[httpx.Request]:
@@ -189,8 +203,16 @@ async def test_capture_and_void_hit_the_authorization(
 
 
 async def test_errors_raise_paypal_error(paypal: PayPalClient) -> None:
-    with pytest.raises(PayPalError, match="HTTP 404"):
+    with pytest.raises(PayPalError, match="HTTP 404") as raised:
         await paypal.capture("UNKNOWN")
+    assert (raised.value.status, raised.value.issue) == (404, None)
+
+
+async def test_expired_authorization_is_reported_by_issue(paypal: PayPalClient) -> None:
+    with pytest.raises(PayPalError) as raised:
+        await paypal.capture("AUTH-OLD")
+    assert raised.value.status == 422
+    assert raised.value.issue == AUTHORIZATION_EXPIRED
 
 
 def test_client_only_talks_to_sandbox() -> None:

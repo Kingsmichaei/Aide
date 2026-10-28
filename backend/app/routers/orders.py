@@ -96,7 +96,7 @@ async def confirm(
     order_id: int, body: ConfirmIn, session: SessionDep, channel3: Channel3Dep, user: CurrentUser
 ) -> ConfirmOut:
     order = _get(session, order_id, user)
-    if order.status != OrderStatus.draft:
+    if not _needs_confirmation(order):
         raise HTTPException(status.HTTP_409_CONFLICT, f"Order is {order.status}, not a draft")
 
     if body.method == ConfirmationMethod.voice:
@@ -144,7 +144,7 @@ async def create_paypal_order(
     order = _get(session, order_id, user)
     if order.status == OrderStatus.awaiting_shopper and order.paypal_order_id:
         return PayPalOut(paypal_order_id=order.paypal_order_id)
-    if order.status != OrderStatus.draft or order.confirmed_total is None:
+    if not _needs_confirmation(order) or order.confirmed_total is None:
         raise HTTPException(status.HTTP_409_CONFLICT, "The shopper has not confirmed this order")
 
     # Rule 4: re-check the price just before creating the PayPal order.
@@ -210,6 +210,13 @@ async def approved(
         )
     session.commit()
     return OrderOut.of(order)
+
+
+def _needs_confirmation(order: Order) -> bool:
+    """A draft, or an order sent back to the shopper after its PayPal hold expired."""
+    return order.status == OrderStatus.draft or (
+        order.status == OrderStatus.awaiting_shopper and order.paypal_order_id is None
+    )
 
 
 def _get(session: Session, order_id: int, user: User) -> Order:

@@ -21,8 +21,16 @@ TOKEN_REFRESH_MARGIN = 60  # seconds before expiry to fetch a new token
 ZERO_DECIMAL_CURRENCIES = {"HUF", "JPY", "TWD"}
 
 
+# Payments v2 422 issues (from PayPal's OpenAPI spec, payments_payment_v2.json).
+AUTHORIZATION_EXPIRED = "AUTHORIZATION_EXPIRED"  # capture after the 29-day hold ended
+
+
 class PayPalError(Exception):
-    pass
+    def __init__(self, message: str, *, status: int | None = None, issue: str | None = None):
+        super().__init__(message)
+        self.status = status
+        # PayPal's machine-readable reason, e.g. AUTHORIZATION_EXPIRED
+        self.issue = issue
 
 
 class PayPalOrder(BaseModel):
@@ -124,7 +132,13 @@ class PayPalClient:
         }
         response = await self._http.post(path, json=body, headers=headers)
         if response.is_error:
-            raise PayPalError(f"PayPal POST {path} failed: HTTP {response.status_code}")
+            issue = _issue(response)
+            raise PayPalError(
+                f"PayPal POST {path} failed: HTTP {response.status_code}"
+                + (f" {issue}" if issue else ""),
+                status=response.status_code,
+                issue=issue,
+            )
         return response.json() if response.content else None
 
     async def _access_token(self) -> str:
@@ -146,3 +160,12 @@ class PayPalClient:
 def _money(amount: Decimal, currency: str) -> dict[str, str]:
     places = Decimal("1") if currency in ZERO_DECIMAL_CURRENCIES else Decimal("0.01")
     return {"currency_code": currency, "value": str(amount.quantize(places))}
+
+
+def _issue(response: httpx.Response) -> str | None:
+    """The first `details[].issue` of a PayPal error body, if there is one."""
+    try:
+        details = response.json().get("details") or []
+        return details[0].get("issue") if details else None
+    except (ValueError, AttributeError):
+        return None

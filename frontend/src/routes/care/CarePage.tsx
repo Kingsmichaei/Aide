@@ -8,6 +8,7 @@ import {
   type CaredForShopper,
   type SessionUser,
 } from "../../lib/api";
+import { ApprovalQueue } from "./ApprovalQueue";
 import { LimitsForm } from "./LimitsForm";
 
 // The caregiver dashboard is English-only for now: caregivers have no
@@ -81,6 +82,7 @@ export function CarePage() {
           </p>
         )}
       </section>
+      <ApprovalQueue />
       {selected && <LimitsForm key={selected.id} shopper={selected} />}
     </main>
   );
