@@ -223,7 +223,12 @@ def test_llm_failure_returns_503_and_saves_nothing(
 async def test_gemini_adapter_request_and_response() -> None:
     sent: list[dict[str, Any]] = []
     thought = {"type": "thought", "signature": "sig-1"}
-    fc = {"type": "function_call", "id": "c1", "name": "search_products", "arguments": {"query": "x"}}
+    fc = {
+        "type": "function_call",
+        "id": "c1",
+        "name": "search_products",
+        "arguments": {"query": "x"},
+    }
 
     def handler(request: httpx.Request) -> httpx.Response:
         sent.append(json.loads(request.content))
@@ -239,7 +244,9 @@ async def test_gemini_adapter_request_and_response() -> None:
             },
         )
 
-    client = GeminiClient("key", "gemini-test", http=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    client = GeminiClient(
+        "key", "gemini-test", http=httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    )
     history: History = [
         {"role": "user", "text": "Find x"},
         {"role": "model", "text": "", "raw": [thought, fc]},
@@ -266,8 +273,12 @@ async def test_gemini_adapter_request_and_response() -> None:
         },
     ]
     assert body["tools"] == [
-        {"type": "function", "name": "search_products", "description": "d",
-         "parameters": {"type": "object"}}
+        {
+            "type": "function",
+            "name": "search_products",
+            "description": "d",
+            "parameters": {"type": "object"},
+        }
     ]
     assert turn.text == "Hi"
     assert turn.tool_calls == [ToolCall(id="c1", name="search_products", arguments={"query": "x"})]

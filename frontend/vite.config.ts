@@ -7,5 +7,7 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
+    // This machine starts jsdom slowly; the first test in a file can take >5s.
+    testTimeout: 15_000,
   },
 });

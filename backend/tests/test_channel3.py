@@ -25,8 +25,11 @@ def product(pid: str, category: str = "kettles", parent: str = "kitchen", **extr
         "title": f"Product {pid}",
         "images": [
             {"url": "https://img.example/a.jpg", "is_main_image": False},
-            {"url": "https://img.example/b.jpg", "cleaned_url": "https://cdn.example/b.png",
-             "is_main_image": True},
+            {
+                "url": "https://img.example/b.jpg",
+                "cleaned_url": "https://cdn.example/b.png",
+                "is_main_image": True,
+            },
         ],
         "category": {
             "slug": category,
@@ -34,8 +37,11 @@ def product(pid: str, category: str = "kettles", parent: str = "kitchen", **extr
             "has_children": False,
             "path": [{"slug": parent}, {"slug": category}],
         },
-        "offers": [offer(24.99, "target.com"), offer(19.5, "walmart.com"),
-                   offer(9.99, "cheap.com", "OutOfStock")],
+        "offers": [
+            offer(24.99, "target.com"),
+            offer(19.5, "walmart.com"),
+            offer(9.99, "cheap.com", "OutOfStock"),
+        ],
         **extra,
     }
 
@@ -83,7 +89,9 @@ async def test_search_filters_blocked_categories_including_parents() -> None:
     ]
     client, seen = client_for(lambda _: httpx.Response(200, json={"products": products}))
 
-    results = await client.search_products("gift", limit=5, blocked_categories={"alcohol", "knives"})
+    results = await client.search_products(
+        "gift", limit=5, blocked_categories={"alcohol", "knives"}
+    )
 
     assert [p.id for p in results] == ["ok"]
     assert json.loads(seen[0].content)["limit"] == 10  # over-fetch to make up for dropped items

@@ -1,8 +1,9 @@
 @import "tailwindcss";
 
-/* 125% of the browser default (16px) gives a 20px base while still honouring user font settings. */
+/* --text-size is the shopper setting in px (20-32). Scaling the browser default (16px)
+   keeps honouring user font settings. */
 html {
-  font-size: 125%;
+  font-size: calc(var(--text-size, 20) / 16 * 100%);
 }
 
 body {

@@ -45,6 +45,14 @@ export interface Order {
   status_changed_at: string;
 }
 
+export type Language = "en" | "es" | "fr" | "ar";
+
+export interface ShopperSettings {
+  language: Language;
+  voice_speed: number;
+  text_size: number;
+}
+
 export interface ChatResponse {
   conversation_id: number;
   reply: string;
@@ -91,8 +99,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 function post<T>(path: string, body?: unknown): Promise<T> {
+  return send<T>("POST", path, body);
+}
+
+function send<T>(method: string, path: string, body?: unknown): Promise<T> {
   return request<T>(path, {
-    method: "POST",
+    method,
     headers: { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
@@ -127,4 +139,15 @@ export function createPayPalOrder(
 
 export function approveOrder(orderId: number): Promise<Order> {
   return post(`/orders/${orderId}/approved`);
+}
+
+export function getSettings(shopperId: number): Promise<ShopperSettings> {
+  return request(`/shoppers/${shopperId}/settings`);
+}
+
+export function updateSettings(
+  shopperId: number,
+  changes: Partial<ShopperSettings>,
+): Promise<ShopperSettings> {
+  return send("PATCH", `/shoppers/${shopperId}/settings`, changes);
 }
