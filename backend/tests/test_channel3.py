@@ -37,7 +37,10 @@ def product(pid: str, category: str = "kettles", parent: str = "kitchen", **extr
             "slug": category,
             "title": category.title(),
             "has_children": False,
-            "path": [{"slug": parent}, {"slug": category}],
+            "path": [
+                {"slug": parent, "title": parent.title()},
+                {"slug": category, "title": category.title()},
+            ],
         },
         "offers": [
             offer(24.99, "target.com"),
@@ -77,6 +80,7 @@ async def test_search_sends_query_and_returns_typed_products() -> None:
     assert result.id == "p1"
     assert result.image_url == "https://cdn.example/b.png"
     assert result.category == "kettles"
+    assert result.top_category == "Kitchen"  # spending is grouped by the top category
     # Cheapest in-stock offer wins; the out-of-stock $9.99 is ignored.
     assert result.best_offer is not None
     assert result.best_offer.price == Decimal("19.50")

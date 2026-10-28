@@ -1,7 +1,6 @@
 import { Navigate, type RouteObject } from "react-router";
 
 import { requireRole } from "./lib/session";
-import { CarePage } from "./routes/care/CarePage";
 import { SettingsPage } from "./routes/shop/SettingsPage";
 import { ShopLayout } from "./routes/shop/ShopLayout";
 import { ShopPage } from "./routes/shop/ShopPage";
@@ -27,6 +26,9 @@ export const routes: RouteObject[] = [
     path: "/care",
     loader: () => requireRole("caregiver"),
     hydrateFallbackElement: checking,
-    element: <CarePage />,
+    // Loaded on demand: AG Grid and AG Charts stay out of the shopper's download.
+    lazy: async () => ({
+      Component: (await import("./routes/care/CarePage")).CarePage,
+    }),
   },
 ];

@@ -12,7 +12,12 @@ import { usePolling } from "../../lib/usePolling";
 type Decision = "approve" | "decline";
 
 /** Orders over a limit, waiting for this caregiver. Approve pays; decline releases the hold. */
-export function ApprovalQueue() {
+export function ApprovalQueue({
+  onDecided,
+}: {
+  /** Called after a decision, so the ledger and totals refresh at once. */
+  onDecided?: () => void;
+} = {}) {
   const [orders, setOrders] = useState<WaitingOrder[] | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -36,6 +41,7 @@ export function ApprovalQueue() {
     try {
       const outcome = await decideApproval(order.order_id, decision, note);
       setResult(outcome.message);
+      onDecided?.();
       setOrders((current) =>
         (current ?? []).filter((o) => o.order_id !== order.order_id),
       );

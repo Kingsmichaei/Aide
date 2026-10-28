@@ -16,6 +16,8 @@ class Order(Base):
     channel3_product_id: Mapped[str] = mapped_column(String(200))
     title: Mapped[str] = mapped_column(String(500))
     retailer: Mapped[str] = mapped_column(String(200))
+    # Top-level Channel3 category title (e.g. "Health"), for spending by category.
+    category: Mapped[str | None] = mapped_column(String(200))
     price: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     currency: Mapped[str] = mapped_column(String(3))
     confirmed_total: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))

@@ -61,6 +61,7 @@ def create_draft(session: Session, shopper_id: int, product: ProductDetail, acto
         channel3_product_id=product.id,
         title=product.title,
         retailer=offer.retailer,
+        category=product.top_category,
         price=offer.price,
         currency=offer.currency,
         status=OrderStatus.draft,

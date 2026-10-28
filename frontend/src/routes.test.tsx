@@ -108,7 +108,7 @@ describe("routes", () => {
       }),
     ).toBeVisible();
     expect(screen.getByText("Signed in as Sam")).toBeVisible();
-    expect(await screen.findByText("Rosa")).toBeVisible();
+    expect(await screen.findByText("Looking after Rosa")).toBeVisible();
   });
 
   it("a shopper cannot open /care", async () => {

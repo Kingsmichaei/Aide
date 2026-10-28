@@ -96,6 +96,54 @@ export interface OrderStatusResponse {
   note: string | null;
 }
 
+export interface LedgerRow {
+  id: number;
+  created_at: string;
+  title: string;
+  retailer: string;
+  /** Top-level Channel3 category, e.g. "Health". */
+  category: string | null;
+  price: string;
+  total: string;
+  currency: string;
+  status: OrderStatus;
+  method: "voice" | "button" | null;
+  /** The caregiver who approved it; null when no approval was needed. */
+  approved_by: string | null;
+  declined_by: string | null;
+}
+
+export interface OrderDetail {
+  order: LedgerRow;
+  confirmation_transcript: string | null;
+  events: { at: string; event: string; actor: string; status: OrderStatus }[];
+  decisions: {
+    decision: "approved" | "declined";
+    caregiver: string;
+    note: string | null;
+    at: string;
+  }[];
+  /** The shopper's recent conversation with Aide, text only. */
+  conversation: { role: "shopper" | "aide"; text: string }[];
+}
+
+export interface ChartPoint {
+  label: string;
+  total: string;
+}
+
+export interface Spending {
+  currency: string;
+  spent_this_month: string;
+  monthly_max: string | null;
+  per_order_max: string | null;
+  limit_left: string | null;
+  waiting: number;
+  /** Labels like "2026-10", oldest first. */
+  by_month: ChartPoint[];
+  by_category: ChartPoint[];
+}
+
 export interface LimitsInput {
   per_order_max: string;
   monthly_max: string;
@@ -274,6 +322,21 @@ export function decideApproval(
   note: string,
 ): Promise<DecisionResult> {
   return post(`/care/approvals/${orderId}`, { decision, note: note || null });
+}
+
+export function getLedger(shopperId: number): Promise<LedgerRow[]> {
+  return request(`/care/shoppers/${shopperId}/orders`);
+}
+
+export function getOrderDetail(
+  shopperId: number,
+  orderId: number,
+): Promise<OrderDetail> {
+  return request(`/care/shoppers/${shopperId}/orders/${orderId}`);
+}
+
+export function getSpending(shopperId: number): Promise<Spending> {
+  return request(`/care/shoppers/${shopperId}/spending`);
 }
 
 export function getLimits(shopperId: number): Promise<Limits> {

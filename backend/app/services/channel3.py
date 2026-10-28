@@ -33,7 +33,9 @@ class Product(BaseModel):
     id: str
     title: str
     image_url: str | None
-    category: str | None
+    category: str | None  # the product's own category slug, e.g. "vitamins"
+    # Title of the top-level category, e.g. "Health": what spending is grouped by.
+    top_category: str | None = None
     best_offer: Offer | None
 
 
@@ -186,8 +188,15 @@ def _summary(raw: dict[str, Any], offers: list[Offer]) -> Product:
         title=raw["title"],
         image_url=_main_image(raw.get("images") or []),
         category=(raw.get("category") or {}).get("slug"),
+        top_category=_top_category(raw.get("category") or {}),
         best_offer=min(offers, key=lambda offer: offer.price, default=None),
     )
+
+
+def _top_category(category: dict[str, Any]) -> str | None:
+    path = category.get("path") or []
+    root = path[0] if path else category
+    return root.get("title") or None
 
 
 def _main_image(images: list[dict[str, Any]]) -> str | None:
