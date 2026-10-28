@@ -21,7 +21,11 @@ beforeEach(() => {
     auto_send: true,
     read_aloud: true,
   });
-  vi.stubGlobal("speechSynthesis", { speak: speakMock, cancel: cancelMock });
+  vi.stubGlobal("speechSynthesis", {
+    speak: speakMock,
+    cancel: cancelMock,
+    getVoices: () => [],
+  });
   vi.stubGlobal(
     "SpeechSynthesisUtterance",
     class {

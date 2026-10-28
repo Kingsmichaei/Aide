@@ -78,11 +78,9 @@ export function SettingsPage() {
         <button
           type="button"
           onClick={() =>
-            speak(
-              VOICE_SAMPLE[settings.language],
-              settings.language,
-              settings.voice_speed,
-            )
+            speak(VOICE_SAMPLE[settings.language], settings.language, {
+              rate: settings.voice_speed,
+            })
           }
           className="min-h-16 rounded-2xl border-2 border-blue-800 px-8 text-2xl font-semibold focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-blue-800 dark:border-blue-300"
         >
