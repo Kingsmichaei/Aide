@@ -62,6 +62,8 @@ export interface ChatResponse {
   reply: string;
   products: Product[];
   draft_order: Order | null;
+  /** The reply's language when it differs from the shopper's setting. */
+  reply_language: Language | null;
 }
 
 export type ConfirmReason =

@@ -6,7 +6,6 @@ import {
   listen,
   pickVoice,
   speak,
-  speechMessage,
   stopSpeaking,
   type ListenHandlers,
 } from "./speech";
@@ -241,28 +240,8 @@ describe("text to speech", () => {
   });
 });
 
-describe("speechMessage", () => {
-  it("has every message in every language", () => {
-    for (const language of ["en", "es", "fr", "ar"] as const) {
-      for (const error of [
-        "unsupported",
-        "not-allowed",
-        "no-speech",
-        "no-mic",
-        "network",
-        "unknown",
-      ] as const) {
-        expect(speechMessage(error, language)).not.toBe("");
-      }
-    }
-  });
-
-  it("tells the shopper they can type", () => {
-    expect(speechMessage("not-allowed", "en")).toMatch(/type/);
-    expect(speechMessage("unsupported", "es")).toMatch(/escribir/);
-  });
-
-  it("canSpeak() reflects speechSynthesis support", () => {
+describe("canSpeak", () => {
+  it("reflects speechSynthesis support", () => {
     vi.stubGlobal("speechSynthesis", {});
     expect(canSpeak()).toBe(true);
   });

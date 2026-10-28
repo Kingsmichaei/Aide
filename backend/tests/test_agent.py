@@ -126,7 +126,13 @@ def clear_overrides() -> Iterator[None]:
 
 
 def test_agent_tools_cannot_move_money() -> None:
-    assert set(TOOLS) == {"search_products", "compare_offers", "find_cheaper", "propose_order"}
+    assert set(TOOLS) == {
+        "search_products",
+        "compare_offers",
+        "find_cheaper",
+        "propose_order",
+        "reply_in_language",
+    }
     agent_dir = Path(__file__).parents[1] / "app" / "agent"
     for source in agent_dir.glob("*.py"):
         assert "services.paypal" not in source.read_text(), f"{source.name} imports PayPal"
@@ -156,6 +162,32 @@ def test_search_turn_returns_reply_and_product_cards(
     conversation = session.get(Conversation, body["conversation_id"])
     assert [m["role"] for m in conversation.messages] == ["user", "model", "tool", "model"]
     assert conversation.language == "es"
+
+
+def test_reply_in_another_language_is_reported(
+    session: Session, channel3: FakeChannel3, shopper_id: int
+) -> None:
+    llm = ScriptedLLM([call("reply_in_language", language="fr"), say("Bonjour !")])
+    client = make_client(session, channel3, llm)
+
+    body = client.post("/chat", json={"shopper_id": shopper_id, "message": "Bonjour"}).json()
+
+    assert body["reply"] == "Bonjour !"
+    assert body["reply_language"] == "fr"
+    shopper = session.get(User, shopper_id)
+    assert shopper.language == "es"  # the setting only changes when the shopper says so
+
+
+@pytest.mark.parametrize("language", ["es", "de"])
+def test_reply_language_ignores_the_setting_and_unknown_codes(
+    session: Session, channel3: FakeChannel3, shopper_id: int, language: str
+) -> None:
+    llm = ScriptedLLM([call("reply_in_language", language=language), say("Hola.")])
+    client = make_client(session, channel3, llm)
+
+    body = client.post("/chat", json={"shopper_id": shopper_id, "message": "Hola"}).json()
+
+    assert body["reply_language"] is None
 
 
 def test_propose_turn_drafts_order_without_paying(

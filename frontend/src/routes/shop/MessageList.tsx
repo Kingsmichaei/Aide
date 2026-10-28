@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, type Ref } from "react";
 
 import { ProductCard } from "../../components/ProductCard";
-import type { Product } from "../../lib/api";
+import { useI18n } from "../../i18n/useI18n";
+import type { Language, Product } from "../../lib/api";
 import { reasonFor } from "../../lib/readout";
 
 export interface ChatMessage {
@@ -9,6 +10,8 @@ export interface ChatMessage {
   from: "shopper" | "aide";
   text: string;
   products: Product[];
+  /** The language the message is in; Replay uses a voice for it. */
+  language: Language;
 }
 
 interface Props {
@@ -23,6 +26,7 @@ interface Props {
 }
 
 export function MessageList({ messages, onChoose, busy, voice }: Props) {
+  const { t } = useI18n();
   const latestRef = useRef<HTMLLIElement>(null);
   const latest = messages.at(-1);
 
@@ -34,7 +38,7 @@ export function MessageList({ messages, onChoose, busy, voice }: Props) {
   if (messages.length === 0) return null;
 
   return (
-    <ol aria-label="Conversation" className="flex flex-col gap-4">
+    <ol aria-label={t.shop.conversation} className="flex flex-col gap-4">
       {messages.map((message) => (
         <Message
           key={message.id}
@@ -61,6 +65,7 @@ const VOICE_BUTTON =
   "min-h-12 rounded-xl border-2 border-neutral-500 px-4 text-lg font-semibold hover:bg-neutral-200 focus-visible:outline-4 focus-visible:outline-blue-800 dark:hover:bg-neutral-700";
 
 function Message({ message, latestRef, onChoose, busy, voice }: MessageProps) {
+  const { t } = useI18n();
   const textId = useId();
   const options = message.products.filter((product) => product.best_offer);
 
@@ -76,12 +81,15 @@ function Message({ message, latestRef, onChoose, busy, voice }: MessageProps) {
     >
       <p id={textId}>
         <span className="font-semibold">
-          {message.from === "aide" ? "Aide" : "You"}:{" "}
+          {message.from === "aide" ? t.shop.aide : t.shop.you}:{" "}
         </span>
-        {message.text}
+        {/* A reply can be in another language than the page, e.g. Arabic in an English UI. */}
+        <span lang={message.language} dir="auto">
+          {message.text}
+        </span>
       </p>
       {options.length > 0 && (
-        <ul aria-label="Options" className="grid gap-4 sm:grid-cols-3">
+        <ul aria-label={t.card.options} className="grid gap-4 sm:grid-cols-3">
           {options.map((product, index) => (
             <li key={product.id}>
               <ProductCard
@@ -103,7 +111,7 @@ function Message({ message, latestRef, onChoose, busy, voice }: MessageProps) {
             onClick={() => voice.onReplay(message, false)}
             className={VOICE_BUTTON}
           >
-            Replay
+            {t.shop.replay}
           </button>
           <button
             type="button"
@@ -111,10 +119,10 @@ function Message({ message, latestRef, onChoose, busy, voice }: MessageProps) {
             onClick={() => voice.onReplay(message, true)}
             className={VOICE_BUTTON}
           >
-            Replay slowly
+            {t.shop.replaySlowly}
           </button>
           <button type="button" onClick={voice.onStop} className={VOICE_BUTTON}>
-            Stop
+            {t.shop.stop}
           </button>
         </div>
       )}

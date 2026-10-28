@@ -1,7 +1,7 @@
 import { useId } from "react";
 
+import { useI18n } from "../i18n/useI18n";
 import type { Product } from "../lib/api";
-import { formatMoney } from "../lib/format";
 import type { Reason } from "../lib/readout";
 
 interface Props {
@@ -20,6 +20,7 @@ export function ProductCard({
   onChoose,
   disabled = false,
 }: Props) {
+  const { t, money } = useI18n();
   const titleId = useId();
   const offer = product.best_offer;
   if (!offer) return null;
@@ -36,22 +37,21 @@ export function ProductCard({
           className="aspect-square w-full rounded-xl bg-white object-contain"
         />
       )}
-      <p className="font-semibold">Option {position}</p>
-      <h3 id={titleId} className="text-xl font-semibold">
+      <p className="font-semibold">{t.card.option(position)}</p>
+      {/* Titles come from the store, usually in English, whatever the page language. */}
+      <h3 id={titleId} dir="auto" className="text-xl font-semibold">
         {product.title}
       </h3>
-      <p className="text-2xl font-bold">
-        {formatMoney(offer.price, offer.currency)}
-      </p>
+      <p className="text-2xl font-bold">{money(offer.price, offer.currency)}</p>
       {reason.kind === "cheapest" && (
-        <p className="font-semibold">Lowest price here</p>
+        <p className="font-semibold">{t.card.lowest}</p>
       )}
       {reason.kind === "sale" && (
         <p className="font-semibold">
-          On sale. Was {formatMoney(reason.was, reason.currency)}
+          {t.card.sale(money(reason.was, reason.currency))}
         </p>
       )}
-      <p>From {offer.retailer}</p>
+      <p>{t.card.from(offer.retailer)}</p>
       <button
         type="button"
         onClick={() => onChoose(product)}
@@ -59,7 +59,7 @@ export function ProductCard({
         aria-describedby={titleId}
         className="min-h-16 rounded-xl border-2 border-blue-800 px-6 text-xl font-semibold text-blue-900 hover:bg-blue-50 focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-blue-800 disabled:opacity-60 dark:border-blue-300 dark:text-blue-100 dark:hover:bg-blue-950"
       >
-        Choose this
+        {t.card.choose}
       </button>
     </article>
   );

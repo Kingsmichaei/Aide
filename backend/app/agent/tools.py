@@ -17,6 +17,7 @@ from app.services.channel3 import Channel3Client, Product
 from app.services.orders import create_draft, total
 
 MAX_OPTIONS = 3  # CLAUDE.md: at most three options at a time
+LANGUAGES = ("en", "es", "fr", "ar")
 
 
 @dataclass
@@ -25,8 +26,10 @@ class ToolContext:
     channel3: Channel3Client
     shopper_id: int
     blocked_categories: list[str]
+    language: str = "en"  # the shopper's language setting
     products: list[Product] = field(default_factory=list)  # cards to show with the reply
     draft_order: Order | None = None
+    reply_language: str | None = None  # set when the reply is in another language
 
 
 @dataclass(frozen=True)
@@ -103,6 +106,18 @@ async def propose_order(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any
     }
 
 
+async def reply_in_language(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
+    language = _str(args, "language")
+    if language not in LANGUAGES:
+        return {"error": f"Aide speaks only {', '.join(LANGUAGES)}. Reply in {ctx.language}."}
+    ctx.reply_language = None if language == ctx.language else language
+    return {
+        "ok": True,
+        "next_step": "Reply in this language. At the end, ask in one short sentence if they "
+        "want to use it from now on. The app shows a button for that; you cannot change it.",
+    }
+
+
 def _spec(name: str, description: str, properties: dict[str, Any], required: list[str]):
     return ToolSpec(
         name=name,
@@ -158,6 +173,17 @@ TOOLS: dict[str, Tool] = {
                 ["product_id"],
             ),
             propose_order,
+        ),
+        Tool(
+            _spec(
+                "reply_in_language",
+                "Call this before replying when the shopper clearly writes in a different "
+                "language from their setting. The app then reads your reply in that language "
+                "and offers the shopper a button to switch. It changes nothing by itself.",
+                {"language": {"type": "string", "enum": list(LANGUAGES)}},
+                ["language"],
+            ),
+            reply_in_language,
         ),
     ]
 }

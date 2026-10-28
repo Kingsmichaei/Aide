@@ -29,6 +29,8 @@ class ChatOut(BaseModel):
     reply: str
     products: list[Product]
     draft_order: OrderOut | None
+    # The language the reply is in, when it differs from the shopper's setting.
+    reply_language: str | None = None
 
 
 @router.post("/chat")
@@ -58,6 +60,7 @@ async def chat(
         channel3=channel3,
         shopper_id=shopper.id,
         blocked_categories=blocked_categories(session, shopper.id),
+        language=shopper.language,
     )
     try:
         reply = await run_turn(
@@ -76,4 +79,5 @@ async def chat(
         reply=reply,
         products=ctx.products,
         draft_order=OrderOut.of(ctx.draft_order) if ctx.draft_order else None,
+        reply_language=ctx.reply_language,
     )

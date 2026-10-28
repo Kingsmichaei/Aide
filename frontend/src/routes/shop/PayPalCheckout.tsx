@@ -6,8 +6,8 @@ import {
   createPayPalOrder,
   type Order,
 } from "../../lib/api";
+import { useI18n } from "../../i18n/useI18n";
 import { paypalClientId } from "../../lib/config";
-import { formatMoney } from "../../lib/format";
 import { loadPayPal } from "../../lib/paypal";
 
 interface Props {
@@ -21,13 +21,14 @@ interface Props {
 type SdkState = "loading" | "ready" | "unavailable";
 
 export function PayPalCheckout({ order, onDone, onRecheck, onError }: Props) {
+  const { t, money } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const [sdkState, setSdkState] = useState<SdkState>("loading");
   // Latest callbacks without re-running the SDK setup.
-  const handlers = useRef({ onDone, onRecheck, onError });
+  const handlers = useRef({ onDone, onRecheck, onError, t });
   useEffect(() => {
-    handlers.current = { onDone, onRecheck, onError };
+    handlers.current = { onDone, onRecheck, onError, t };
   });
 
   useEffect(() => {
@@ -70,15 +71,13 @@ export function PayPalCheckout({ order, onDone, onRecheck, onError }: Props) {
             try {
               handlers.current.onDone(await approveOrder(order.id));
             } catch {
-              handlers.current.onError(
-                "PayPal approved, but we could not finish. Please try again.",
-              );
+              handlers.current.onError(handlers.current.t.paypal.finishFailed);
             }
           },
           onCancel: () =>
-            handlers.current.onError("You closed PayPal. Nothing was paid."),
+            handlers.current.onError(handlers.current.t.paypal.closed),
           onError: () =>
-            handlers.current.onError("PayPal had a problem. Nothing was paid."),
+            handlers.current.onError(handlers.current.t.paypal.problem),
         });
         if (cancelled) return;
         button = document.createElement("paypal-button");
@@ -113,16 +112,13 @@ export function PayPalCheckout({ order, onDone, onRecheck, onError }: Props) {
         tabIndex={-1}
         className="text-2xl font-bold"
       >
-        Pay {formatMoney(order.confirmed_total ?? order.total, order.currency)}{" "}
-        with PayPal
+        {t.paypal.heading(
+          money(order.confirmed_total ?? order.total, order.currency),
+        )}
       </h2>
-      <p>
-        Press the PayPal button. PayPal will open so you can log in and approve.
-      </p>
-      {sdkState === "loading" && <p>Loading PayPal…</p>}
-      {sdkState === "unavailable" && (
-        <p role="alert">PayPal is not available right now. Nothing was paid.</p>
-      )}
+      <p>{t.paypal.instructions}</p>
+      {sdkState === "loading" && <p>{t.paypal.loading}</p>}
+      {sdkState === "unavailable" && <p role="alert">{t.paypal.unavailable}</p>}
       <div ref={containerRef} />
     </section>
   );

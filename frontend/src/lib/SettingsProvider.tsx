@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { direction } from "../i18n";
 import { getSettings, updateSettings, type ShopperSettings } from "./api";
 import { DEFAULT_SETTINGS, SettingsContext } from "./settings-context";
 
@@ -36,11 +37,13 @@ export function SettingsProvider({ shopperId, children }: Props) {
     };
   }, [shopperId]);
 
-  // Text size applies app-wide through one CSS variable on <html>.
+  // Text size applies app-wide through one CSS variable on <html>; Arabic
+  // turns the whole page right-to-left.
   useEffect(() => {
     const html = document.documentElement;
     html.style.setProperty("--text-size", String(settings.text_size));
     html.lang = settings.language;
+    html.dir = direction(settings.language);
   }, [settings.text_size, settings.language]);
 
   const update = useCallback(

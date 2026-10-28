@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { MESSAGES } from "../../i18n";
 import type { Language } from "../../lib/api";
 import {
   listen,
@@ -30,6 +31,7 @@ export function TalkButton({
   onFinished,
   onError,
 }: Props) {
+  const t = MESSAGES[language].shop;
   const [listening, setListening] = useState(false);
   const session = useRef<Listening | undefined>(undefined);
   const heard = useRef("");
@@ -81,14 +83,12 @@ export function TalkButton({
             className="size-5 rounded-full bg-red-400 motion-safe:animate-pulse"
           />
         )}
-        {listening ? "Stop listening" : "Talk to Aide"}
+        {listening ? t.stopListening : t.talk}
       </button>
       {/* Deliberately not a live region: a screen reader talking now would be
           picked up by the microphone. The button's new name says it instead. */}
       {listening && (
-        <p className="text-center text-2xl font-bold">
-          Listening… Press the button again when you are done.
-        </p>
+        <p className="text-center text-2xl font-bold">{t.listening}</p>
       )}
     </div>
   );

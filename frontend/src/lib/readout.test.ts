@@ -86,7 +86,7 @@ describe("optionSentence", () => {
       /^Opción 2: Kettle b, 25,00\sUS\$\. Es el precio más bajo\.$/,
     );
     expect(optionSentence(options[0] as Product, 0, options, "fr")).toMatch(
-      /^Option 1 : Kettle a, 30,00\s\$US\. Il est vendu par a\.com\.$/,
+      /^Choix 1 : Kettle a, 30,00\s\$US\. Il est vendu par a\.com\.$/,
     );
     expect(optionSentence(options[0] as Product, 0, options, "ar")).toMatch(
       /^الخيار 1: Kettle a، .+\. يبيعه a\.com\.$/,

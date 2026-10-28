@@ -1,11 +1,8 @@
+import { LOCALE } from "../i18n";
 import type { Language } from "./api";
 
-export const SPEECH_LANG: Record<Language, string> = {
-  en: "en-US",
-  es: "es-ES",
-  fr: "fr-FR",
-  ar: "ar-SA",
-};
+/** Speech uses the same locale as number formats. */
+export const SPEECH_LANG: Record<Language, string> = LOCALE;
 
 // --- Speech to text -------------------------------------------------------
 
@@ -214,60 +211,4 @@ export function speak(
 
 export function stopSpeaking(): void {
   if (canSpeak()) window.speechSynthesis.cancel();
-}
-
-// --- Messages -------------------------------------------------------------
-
-// Shown and spoken. Moves into src/i18n with the other UI strings in step 5.
-const MESSAGES: Record<
-  Language,
-  Record<ListenError | "unsupported", string>
-> = {
-  en: {
-    unsupported: "Talking is not available in this browser. You can type.",
-    "not-allowed":
-      "I can't use the microphone. Please allow it in your browser, or type instead.",
-    "no-speech": "I didn't hear anything. Press Talk to Aide and try again.",
-    "no-mic": "I can't find a microphone. You can type instead.",
-    network: "I can't hear you right now. Please type instead.",
-    unknown: "Something went wrong with the microphone. You can type instead.",
-  },
-  es: {
-    unsupported: "No se puede hablar en este navegador. Puede escribir.",
-    "not-allowed":
-      "No puedo usar el micrófono. Permítalo en su navegador o escriba.",
-    "no-speech": "No oí nada. Pulse Hablar con Aide e inténtelo otra vez.",
-    "no-mic": "No encuentro un micrófono. Puede escribir.",
-    network: "Ahora no puedo oírle. Por favor, escriba.",
-    unknown: "Algo falló con el micrófono. Puede escribir.",
-  },
-  fr: {
-    unsupported:
-      "La parole n'est pas disponible dans ce navigateur. Vous pouvez écrire.",
-    "not-allowed":
-      "Je ne peux pas utiliser le micro. Autorisez-le dans votre navigateur, ou écrivez.",
-    "no-speech":
-      "Je n'ai rien entendu. Appuyez sur Parler à Aide et réessayez.",
-    "no-mic": "Je ne trouve pas de micro. Vous pouvez écrire.",
-    network:
-      "Je ne peux pas vous entendre pour le moment. Écrivez, s'il vous plaît.",
-    unknown: "Un problème est survenu avec le micro. Vous pouvez écrire.",
-  },
-  ar: {
-    unsupported: "التحدث غير متاح في هذا المتصفح. يمكنك الكتابة.",
-    "not-allowed":
-      "لا أستطيع استخدام الميكروفون. اسمح به في المتصفح، أو اكتب بدلاً من ذلك.",
-    "no-speech": "لم أسمع شيئاً. اضغط على تحدث مع Aide وحاول مرة أخرى.",
-    "no-mic": "لا أجد ميكروفوناً. يمكنك الكتابة.",
-    network: "لا أستطيع سماعك الآن. من فضلك اكتب.",
-    unknown: "حدثت مشكلة في الميكروفون. يمكنك الكتابة.",
-  },
-};
-
-/** A short, plain message to show and speak when talking doesn't work. */
-export function speechMessage(
-  error: ListenError | "unsupported",
-  language: Language,
-): string {
-  return MESSAGES[language][error];
 }

@@ -81,6 +81,7 @@ beforeEach(() => {
     reply: "I found a kettle.",
     products: [kettle],
     draft_order: null,
+    reply_language: null,
   });
 });
 
@@ -109,6 +110,7 @@ async function chooseAndConfirm() {
     reply: "It costs $29.99 in total. Do you want to buy it?",
     products: [],
     draft_order: draftOrder,
+    reply_language: null,
   });
   fireEvent.click(screen.getByRole("button", { name: "Choose this" }));
   await screen.findByRole("heading", { name: "Check your order" });
@@ -242,7 +244,7 @@ describe("ShopPage", () => {
   });
 });
 
-describe("Voice", () => {
+describe("Voice and languages", () => {
   const speakMock = vi.fn();
   const cancelMock = vi.fn();
 
@@ -269,10 +271,12 @@ describe("Voice", () => {
     FakeRecognition.reset();
   });
 
+  const update = vi.fn(async () => {});
+
   function renderWith(changes: Partial<api.ShopperSettings> = {}) {
     const value = {
       settings: { ...DEFAULT_SETTINGS, ...changes },
-      update: async () => {},
+      update,
     };
     render(
       <SettingsContext value={value}>
@@ -281,8 +285,8 @@ describe("Voice", () => {
     );
   }
 
-  function pressTalk() {
-    fireEvent.click(screen.getByRole("button", { name: "Talk to Aide" }));
+  function pressTalk(name = "Talk to Aide") {
+    fireEvent.click(screen.getByRole("button", { name }));
     const recognition = FakeRecognition.last;
     if (!recognition) throw new Error("not listening");
     return recognition;
@@ -293,26 +297,26 @@ describe("Voice", () => {
     renderWith({ language: "es" });
 
     expect(
-      screen.queryByRole("button", { name: "Talk to Aide" }),
+      screen.queryByRole("button", { name: "Hablar con Aide" }),
     ).not.toBeInTheDocument();
     expect(screen.getByText(/Puede escribir/)).toBeVisible();
-    expect(screen.getByLabelText("Type your message")).toBeVisible();
+    expect(screen.getByLabelText("Escriba su mensaje")).toBeVisible();
   });
 
   it("listens in the shopper's language and shows a live transcript", () => {
     renderWith({ language: "es" });
 
-    const recognition = pressTalk();
+    const recognition = pressTalk("Hablar con Aide");
     act(() => {
       recognition.hear(["necesito una", false]);
     });
 
     expect(recognition.lang).toBe("es-ES");
     expect(
-      screen.getByRole("button", { name: "Stop listening" }),
+      screen.getByRole("button", { name: "Dejar de escuchar" }),
     ).toBeVisible();
-    expect(screen.getByText(/Listening…/)).toBeVisible();
-    expect(screen.getByLabelText("Type your message")).toHaveValue(
+    expect(screen.getByText(/Escuchando…/)).toBeVisible();
+    expect(screen.getByLabelText("Escriba su mensaje")).toHaveValue(
       "necesito una",
     );
   });
@@ -458,5 +462,82 @@ describe("Voice", () => {
     expect(
       conversation().getAllByRole("button", { name: "Replay" }),
     ).toHaveLength(1);
+  });
+
+  it("shows the whole shop in the shopper's language", async () => {
+    vi.mocked(api.sendChat)
+      .mockReset()
+      .mockResolvedValueOnce({
+        conversation_id: 1,
+        reply: "Encontré una tetera.",
+        products: [kettle],
+        draft_order: null,
+        reply_language: null,
+      });
+    renderWith({ language: "es", read_aloud: false });
+
+    expect(
+      screen.getByRole("button", { name: "Hablar con Aide" }),
+    ).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Escriba su mensaje"), {
+      target: { value: "Necesito una tetera" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+    const list = await screen.findByRole("list", { name: "Conversación" });
+    expect(within(list).getByText("Encontré una tetera.")).toBeVisible();
+
+    const card = screen.getByRole("article", { name: "Blue kettle" });
+    expect(within(card).getByText("Opción 1")).toBeVisible();
+    expect(within(card).getByText(/^29,99\sUS\$$/)).toBeVisible();
+    expect(within(card).getByText("En target.com")).toBeVisible();
+    expect(
+      within(card).getByRole("button", { name: /Elegir este/ }),
+    ).toBeVisible();
+  });
+
+  it("speaks a reply in the language Aide used and offers to switch", async () => {
+    vi.mocked(api.sendChat)
+      .mockReset()
+      .mockResolvedValueOnce({
+        conversation_id: 1,
+        reply:
+          "J'ai trouvé une bouilloire. Voulez-vous continuer en français ?",
+        products: [kettle],
+        draft_order: null,
+        reply_language: "fr",
+      });
+    renderWith();
+
+    fireEvent.change(screen.getByLabelText("Type your message"), {
+      target: { value: "Je cherche une bouilloire" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => conversation().getByText(/J'ai trouvé/));
+
+    expect(spoken().map((u) => u.lang)).toEqual(["fr-FR", "fr-FR"]);
+    expect(spoken()[1]?.text).toMatch(/^Choix 1 : Blue kettle, 29,99\s\$US\./);
+    expect(conversation().getByText(/J'ai trouvé/)).toHaveAttribute(
+      "lang",
+      "fr",
+    );
+
+    const switchButton = screen.getByRole("button", {
+      name: "Utiliser Français à partir de maintenant",
+    });
+    expect(switchButton).toHaveAttribute("lang", "fr");
+    fireEvent.click(switchButton);
+
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith({ language: "fr" }),
+    );
+    expect(switchButton).not.toBeInTheDocument();
+  });
+
+  it("does not offer a switch when Aide replies in the shopper's language", async () => {
+    renderWith();
+    await askForKettle();
+    expect(
+      screen.queryByRole("button", { name: /from now on|à partir/ }),
+    ).not.toBeInTheDocument();
   });
 });

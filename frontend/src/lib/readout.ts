@@ -1,6 +1,5 @@
+import { MESSAGES, money } from "../i18n";
 import type { Language, Product } from "./api";
-import { formatMoney } from "./format";
-import { SPEECH_LANG } from "./speech";
 
 /** Why an option is worth a look. Built from real data, never made up. */
 export type Reason =
@@ -37,52 +36,6 @@ export function reasonFor(product: Product, options: Product[]): Reason {
   return { kind: "store", retailer: offer.retailer };
 }
 
-// Moves into src/i18n with the other UI strings in step 5.
-const TEXT: Record<
-  Language,
-  {
-    option: (n: number, title: string, price: string) => string;
-    reason: (reason: Reason, money: (amount: string) => string) => string;
-  }
-> = {
-  en: {
-    option: (n, title, price) => `Option ${n}: ${title}, ${price}.`,
-    reason: (r, money) =>
-      r.kind === "cheapest"
-        ? "It is the lowest price here."
-        : r.kind === "sale"
-          ? `It is on sale. It was ${money(r.was)}.`
-          : `It is sold by ${r.retailer}.`,
-  },
-  es: {
-    option: (n, title, price) => `Opción ${n}: ${title}, ${price}.`,
-    reason: (r, money) =>
-      r.kind === "cheapest"
-        ? "Es el precio más bajo."
-        : r.kind === "sale"
-          ? `Está rebajado. Antes costaba ${money(r.was)}.`
-          : `Lo vende ${r.retailer}.`,
-  },
-  fr: {
-    option: (n, title, price) => `Option ${n} : ${title}, ${price}.`,
-    reason: (r, money) =>
-      r.kind === "cheapest"
-        ? "C'est le prix le plus bas."
-        : r.kind === "sale"
-          ? `Il est en promotion. Avant, il coûtait ${money(r.was)}.`
-          : `Il est vendu par ${r.retailer}.`,
-  },
-  ar: {
-    option: (n, title, price) => `الخيار ${n}: ${title}، ${price}.`,
-    reason: (r, money) =>
-      r.kind === "cheapest"
-        ? "إنه أقل سعر هنا."
-        : r.kind === "sale"
-          ? `عليه تخفيض. كان سعره ${money(r.was)}.`
-          : `يبيعه ${r.retailer}.`,
-  },
-};
-
 /** One short sentence for a product card: number, name, price, one reason. */
 export function optionSentence(
   product: Product,
@@ -92,13 +45,16 @@ export function optionSentence(
 ): string {
   const offer = product.best_offer;
   if (!offer) return "";
-  const text = TEXT[language];
-  const money = (amount: string) =>
-    formatMoney(amount, offer.currency, SPEECH_LANG[language]);
-  return `${text.option(index + 1, product.title, money(offer.price))} ${text.reason(
-    reasonFor(product, options),
-    money,
-  )}`;
+  const t = MESSAGES[language].readout;
+  const price = (amount: string) => money(amount, offer.currency, language);
+  const reason = reasonFor(product, options);
+  const why =
+    reason.kind === "cheapest"
+      ? t.lowest
+      : reason.kind === "sale"
+        ? t.sale(price(reason.was))
+        : t.store(reason.retailer);
+  return `${t.option(index + 1, product.title, price(offer.price))} ${why}`;
 }
 
 /** What Aide says for a reply: the reply, then one sentence per card. */

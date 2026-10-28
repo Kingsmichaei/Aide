@@ -67,7 +67,7 @@ describe("SettingsPage", () => {
       expect(screen.getByRole("radio", { name: "Español" })).toBeChecked(),
     );
     expect(screen.getByRole("radio", { name: "24 px" })).toBeChecked();
-    expect(screen.getByRole("radio", { name: "Slow" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Lenta" })).toBeChecked();
     await waitFor(() =>
       expect(
         document.documentElement.style.getPropertyValue("--text-size"),
@@ -76,7 +76,7 @@ describe("SettingsPage", () => {
     expect(document.documentElement.lang).toBe("es");
   });
 
-  it("saves a change and shows Saved", async () => {
+  it("saves a change and says so in the shopper's language", async () => {
     vi.mocked(api.updateSettings).mockResolvedValue({
       language: "es",
       voice_speed: 0.8,
@@ -91,7 +91,7 @@ describe("SettingsPage", () => {
 
     fireEvent.click(screen.getByRole("radio", { name: "32 px" }));
 
-    expect(await screen.findByText("Saved.")).toBeVisible();
+    expect(await screen.findByText("Guardado.")).toBeVisible();
     expect(api.updateSettings).toHaveBeenCalledWith(1, { text_size: 32 });
     await waitFor(() =>
       expect(
@@ -111,10 +111,10 @@ describe("SettingsPage", () => {
     });
     renderSettings();
     const group = await screen.findByRole("group", {
-      name: "Send my message when I stop speaking",
+      name: "Enviar mi mensaje cuando deje de hablar",
     });
 
-    fireEvent.click(within(group).getByRole("radio", { name: "Off" }));
+    fireEvent.click(within(group).getByRole("radio", { name: "No" }));
 
     await waitFor(() =>
       expect(api.updateSettings).toHaveBeenCalledWith(1, { auto_send: false }),
@@ -131,21 +131,22 @@ describe("SettingsPage", () => {
     });
     renderSettings();
     const group = await screen.findByRole("group", {
-      name: "Read Aide's replies aloud",
+      name: "Leer en voz alta las respuestas de Aide",
     });
 
-    fireEvent.click(within(group).getByRole("radio", { name: "Off" }));
+    fireEvent.click(within(group).getByRole("radio", { name: "No" }));
 
     await waitFor(() =>
       expect(api.updateSettings).toHaveBeenCalledWith(1, { read_aloud: false }),
     );
   });
 
-  it("hides auto-send where the browser cannot listen", () => {
+  it("hides auto-send where the browser cannot listen", async () => {
     renderSettings();
+    await screen.findByRole("heading", { name: "Ajustes" });
     expect(
       screen.queryByRole("group", {
-        name: "Send my message when I stop speaking",
+        name: "Enviar mi mensaje cuando deje de hablar",
       }),
     ).not.toBeInTheDocument();
   });
@@ -160,7 +161,7 @@ describe("SettingsPage", () => {
     fireEvent.click(screen.getByRole("radio", { name: "32 px" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Could not save",
+      "No se pudo guardar",
     );
     expect(screen.getByRole("radio", { name: "24 px" })).toBeChecked();
   });
@@ -171,7 +172,7 @@ describe("SettingsPage", () => {
       expect(screen.getByRole("radio", { name: "Español" })).toBeChecked(),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Test voice" }));
+    fireEvent.click(screen.getByRole("button", { name: "Probar la voz" }));
 
     const [utterance] = speakMock.mock.calls[0] as [
       { text: string; lang: string; rate: number },
@@ -179,5 +180,37 @@ describe("SettingsPage", () => {
     expect(utterance.lang).toBe("es-ES");
     expect(utterance.rate).toBe(0.8);
     expect(utterance.text).toMatch(/^Hola/);
+  });
+
+  it("Arabic turns the whole page right-to-left", async () => {
+    vi.mocked(api.updateSettings).mockResolvedValue({
+      language: "ar",
+      voice_speed: 0.8,
+      text_size: 24,
+      auto_send: true,
+      read_aloud: true,
+    });
+    renderSettings();
+    await screen.findByRole("heading", { name: "Ajustes" });
+    expect(document.documentElement.dir).toBe("ltr");
+
+    fireEvent.click(screen.getByRole("radio", { name: "العربية" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "الإعدادات" }),
+    ).toBeVisible();
+    expect(document.documentElement.dir).toBe("rtl");
+    expect(document.documentElement.lang).toBe("ar");
+    expect(screen.getByRole("link", { name: "تسوق" })).toBeVisible();
+  });
+
+  it("each language choice is marked with its own language", async () => {
+    renderSettings();
+    expect(
+      await screen.findByRole("radio", { name: "Français" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("radio", { name: "العربية" }).closest("label"),
+    ).toHaveAttribute("lang", "ar");
   });
 });
