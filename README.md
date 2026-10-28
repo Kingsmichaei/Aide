@@ -4,7 +4,7 @@ A voice-first AI shopping assistant for people online shopping leaves behind. Th
 
 Built for the PayPal AI Hackathon 2026. All payments run in the PayPal **sandbox**.
 
-- `backend/`: FastAPI, SQLAlchemy 2, Alembic, Postgres
+- `bac- `backend/`: FastAPI, SQLAlchemy 2, Alembic. SQLite for local development, Postgres on Render.
 - `frontend/`: React, Vite, TypeScript, Tailwind, React Router. `/shop` is the shopper app and `/care` is the caregiver dashboard.
 
 ## Run locally
@@ -13,20 +13,15 @@ Built for the PayPal AI Hackathon 2026. All payments run in the PayPal **sandbox
 
 - [uv](https://docs.astral.sh/uv/) (installs Python 3.12 for you)
 - Node.js 22.22+ or 24.15+
-- Postgres 16+, either installed locally or run with Docker:
-
-  ```sh
-  docker run --name aide-db -e POSTGRES_USER=aide -e POSTGRES_PASSWORD=aide -e POSTGRES_DB=aide -p 5432:5432 -d postgres:18
-  ```
 
 ### Environment
 
 ```sh
-cp .env.example .env                    # back end
+cp backend/.env.example backend/.env    # back end
 cp frontend/.env.example frontend/.env  # front end
 ```
 
-The defaults work for local development with the Docker database above. The back end reads `backend/.env` and the repo-root `.env`. The front end reads only `frontend/.env`, and Vite builds those `VITE_*` values into the bundle, so never put secrets there.
+The defaults work for local development. The back end stores its data in a SQLite file, `backend/aide.db`, so you don't need to install a database. To develop against Postgres instead, set `DATABASE_URL=postgresql://user:password@localhost:5432/aide`. The back end reads `backend/.env` and the repo-root `.env`. The front end reads only `frontend/.env`, and Vite builds those `VITE_*` values into the bundle, so never put secrets there.
 
 To shop end to end you also need:
 
@@ -88,10 +83,9 @@ uv run alembic revision --autogenerate -m "describe the change"
 uv run alembic upgrade head
 ```
 
-## Deploy to Render
+Look over the generated file before you commit it. On SQLite, Alembic uses batch mode, which rebuilds a table to change a column. Postgres runs the same migration on deploy, so keep migrations to portable column types.
 
-`render.yaml` is a Render Blueprint that defines three resources:
-
+To start again with an empty local database, delete `backend/aide.db` and run `uv run alembic upgrade head` and `uv run python -m app.seed`.
 | Name | Type | What it is |
 | --- | --- | --- |
 | `aide-api` | Python web service | The FastAPI back end. It runs migrations, then starts uvicorn. |
