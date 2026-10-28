@@ -188,14 +188,42 @@ describe("text to speech", () => {
     );
   });
 
-  it("calls onEnd when speaking finishes or fails", () => {
+  it("calls onEnd once when speaking finishes", () => {
     const onEnd = vi.fn();
     speak("Hello", "en", { onEnd });
 
     const [utterance] = speakMock.mock.calls[0] as [SpeechSynthesisUtterance];
     utterance.onend?.({} as SpeechSynthesisEvent);
     utterance.onerror?.({} as SpeechSynthesisErrorEvent);
-    expect(onEnd).toHaveBeenCalledTimes(2);
+    expect(onEnd).toHaveBeenCalledOnce();
+  });
+
+  it("queues several pieces and ends after the last one", () => {
+    const onEnd = vi.fn();
+    speak(["Here are two.", "", "Option 1.", "Option 2."], "en", { onEnd });
+
+    const utterances = speakMock.mock.calls.map(
+      ([utterance]) => utterance as SpeechSynthesisUtterance,
+    );
+    expect(utterances.map((u) => u.text)).toEqual([
+      "Here are two.",
+      "Option 1.",
+      "Option 2.",
+    ]);
+    expect(cancelMock).toHaveBeenCalledOnce();
+    utterances[0]?.onend?.({} as SpeechSynthesisEvent);
+    expect(onEnd).not.toHaveBeenCalled();
+    utterances[2]?.onend?.({} as SpeechSynthesisEvent);
+    expect(onEnd).toHaveBeenCalledOnce();
+  });
+
+  it("ends early when a piece is interrupted", () => {
+    const onEnd = vi.fn();
+    speak(["One.", "Two."], "en", { onEnd });
+
+    const [first] = speakMock.mock.calls[0] as [SpeechSynthesisUtterance];
+    first.onerror?.({} as SpeechSynthesisErrorEvent);
+    expect(onEnd).toHaveBeenCalledOnce();
   });
 
   it("stopSpeaking() cancels speech", () => {

@@ -17,6 +17,8 @@ class Channel3Error(Exception):
 
 class Offer(BaseModel):
     price: Decimal
+    # The retailer's "was" price when the item is on sale.
+    compare_at_price: Decimal | None = None
     currency: str
     retailer: str
     url: str
@@ -115,10 +117,23 @@ def _is_blocked(raw: dict[str, Any], blocked_categories: Collection[str]) -> boo
     return not slugs.isdisjoint(blocked_categories)
 
 
+def _money(value: Any) -> Decimal:
+    return Decimal(str(value)).quantize(Decimal("0.01"))
+
+
+def _was_price(price: dict[str, Any]) -> Decimal | None:
+    was = price.get("compare_at_price")
+    if was is None:
+        return None
+    # Only a real discount counts as a sale.
+    return _money(was) if _money(was) > _money(price["price"]) else None
+
+
 def _in_stock_offers(raw: dict[str, Any]) -> list[Offer]:
     return [
         Offer(
-            price=Decimal(str(offer["price"]["price"])).quantize(Decimal("0.01")),
+            price=_money(offer["price"]["price"]),
+            compare_at_price=_was_price(offer["price"]),
             currency=offer["price"]["currency"],
             retailer=offer["domain"],
             url=offer["url"],

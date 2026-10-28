@@ -2,14 +2,24 @@ import { useId } from "react";
 
 import type { Product } from "../lib/api";
 import { formatMoney } from "../lib/format";
+import type { Reason } from "../lib/readout";
 
 interface Props {
   product: Product;
+  /** 1-based, matching "Option 1" when the options are read aloud. */
+  position: number;
+  reason: Reason;
   onChoose: (product: Product) => void;
   disabled?: boolean;
 }
 
-export function ProductCard({ product, onChoose, disabled = false }: Props) {
+export function ProductCard({
+  product,
+  position,
+  reason,
+  onChoose,
+  disabled = false,
+}: Props) {
   const titleId = useId();
   const offer = product.best_offer;
   if (!offer) return null;
@@ -26,12 +36,21 @@ export function ProductCard({ product, onChoose, disabled = false }: Props) {
           className="aspect-square w-full rounded-xl bg-white object-contain"
         />
       )}
+      <p className="font-semibold">Option {position}</p>
       <h3 id={titleId} className="text-xl font-semibold">
         {product.title}
       </h3>
       <p className="text-2xl font-bold">
         {formatMoney(offer.price, offer.currency)}
       </p>
+      {reason.kind === "cheapest" && (
+        <p className="font-semibold">Lowest price here</p>
+      )}
+      {reason.kind === "sale" && (
+        <p className="font-semibold">
+          On sale. Was {formatMoney(reason.was, reason.currency)}
+        </p>
+      )}
       <p>From {offer.retailer}</p>
       <button
         type="button"

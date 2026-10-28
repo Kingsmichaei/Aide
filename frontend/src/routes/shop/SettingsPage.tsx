@@ -79,6 +79,16 @@ export function SettingsPage() {
         onChange={(voice_speed) => change({ voice_speed })}
       />
 
+      {canSpeak() && (
+        <Choices
+          legend="Read Aide's replies aloud"
+          name="read_aloud"
+          options={ON_OFF}
+          value={settings.read_aloud ? "on" : "off"}
+          onChange={(value) => change({ read_aloud: value === "on" })}
+        />
+      )}
+
       {canListen() && (
         <Choices
           legend="Send my message when I stop speaking"

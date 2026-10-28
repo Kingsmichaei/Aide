@@ -121,6 +121,26 @@ describe("SettingsPage", () => {
     );
   });
 
+  it("turns read-aloud off", async () => {
+    vi.mocked(api.updateSettings).mockResolvedValue({
+      language: "es",
+      voice_speed: 0.8,
+      text_size: 24,
+      auto_send: true,
+      read_aloud: false,
+    });
+    renderSettings();
+    const group = await screen.findByRole("group", {
+      name: "Read Aide's replies aloud",
+    });
+
+    fireEvent.click(within(group).getByRole("radio", { name: "Off" }));
+
+    await waitFor(() =>
+      expect(api.updateSettings).toHaveBeenCalledWith(1, { read_aloud: false }),
+    );
+  });
+
   it("hides auto-send where the browser cannot listen", () => {
     renderSettings();
     expect(

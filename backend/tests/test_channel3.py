@@ -10,11 +10,13 @@ from app.services.channel3 import BASE_URL, Channel3Client, Channel3Error
 pytestmark = pytest.mark.anyio
 
 
-def offer(price: float, domain: str, availability: str = "InStock") -> dict[str, Any]:
+def offer(
+    price: float, domain: str, availability: str = "InStock", was: float | None = None
+) -> dict[str, Any]:
     return {
         "url": f"https://buy.example/{domain}",
         "domain": domain,
-        "price": {"price": price, "compare_at_price": None, "currency": "USD"},
+        "price": {"price": price, "compare_at_price": was, "currency": "USD"},
         "availability": availability,
     }
 
@@ -79,6 +81,19 @@ async def test_search_sends_query_and_returns_typed_products() -> None:
     assert result.best_offer is not None
     assert result.best_offer.price == Decimal("19.50")
     assert result.best_offer.retailer == "walmart.com"
+
+
+@pytest.mark.parametrize(("was", "expected"), [(25, Decimal("25.00")), (19.5, None), (None, None)])
+async def test_offer_keeps_was_price_only_for_a_real_discount(
+    was: float | None, expected: Decimal | None
+) -> None:
+    on_sale = product("s", offers=[offer(19.5, "target.com", was=was)])
+    client, _ = client_for(lambda _: httpx.Response(200, json={"products": [on_sale]}))
+
+    [result] = await client.search_products("kettle")
+
+    assert result.best_offer is not None
+    assert result.best_offer.compare_at_price == expected
 
 
 async def test_search_filters_blocked_categories_including_parents() -> None:

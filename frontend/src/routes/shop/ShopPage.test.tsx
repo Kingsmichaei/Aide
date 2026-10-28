@@ -49,6 +49,7 @@ const kettle: api.Product = {
   category: "kettles",
   best_offer: {
     price: "29.99",
+    compare_at_price: null,
     currency: "USD",
     retailer: "target.com",
     url: "https://x",
@@ -241,7 +242,7 @@ describe("ShopPage", () => {
   });
 });
 
-describe("Talk to Aide", () => {
+describe("Voice", () => {
   const speakMock = vi.fn();
   const cancelMock = vi.fn();
 
@@ -380,5 +381,82 @@ describe("Talk to Aide", () => {
     expect(utterance.text).toMatch(/can't use the microphone/);
     expect(utterance.rate).toBe(0.8);
     expect(api.sendChat).not.toHaveBeenCalled();
+  });
+
+  async function askForKettle() {
+    fireEvent.change(screen.getByLabelText("Type your message"), {
+      target: { value: "I need a kettle" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => conversation().getByText("I found a kettle."));
+  }
+
+  function spoken() {
+    return speakMock.mock.calls.map(([utterance]) => {
+      const u = utterance as SpeechSynthesisUtterance;
+      return { text: u.text, rate: u.rate, lang: u.lang };
+    });
+  }
+
+  it("reads each reply aloud, then each card as one sentence", async () => {
+    renderWith({ voice_speed: 0.8 });
+    await askForKettle();
+
+    expect(spoken()).toEqual([
+      { text: "I found a kettle.", rate: 0.8, lang: "en-US" },
+      {
+        text: "Option 1: Blue kettle, $29.99. It is sold by target.com.",
+        rate: 0.8,
+        lang: "en-US",
+      },
+    ]);
+    expect(
+      within(screen.getByRole("article", { name: "Blue kettle" })).getByText(
+        "Option 1",
+      ),
+    ).toBeVisible();
+  });
+
+  it("stays quiet when read-aloud is off, but Replay still works", async () => {
+    renderWith({ read_aloud: false });
+    await askForKettle();
+    expect(speakMock).not.toHaveBeenCalled();
+
+    fireEvent.click(conversation().getByRole("button", { name: "Replay" }));
+
+    expect(spoken().map((u) => u.text)).toEqual([
+      "I found a kettle.",
+      "Option 1: Blue kettle, $29.99. It is sold by target.com.",
+    ]);
+  });
+
+  it("Replay slowly uses a slower voice", async () => {
+    renderWith({ read_aloud: false });
+    await askForKettle();
+
+    fireEvent.click(
+      conversation().getByRole("button", { name: "Replay slowly" }),
+    );
+
+    expect(spoken()[0]?.rate).toBe(0.75);
+  });
+
+  it("Stop stops speaking", async () => {
+    renderWith();
+    await askForKettle();
+    cancelMock.mockClear();
+
+    fireEvent.click(conversation().getByRole("button", { name: "Stop" }));
+
+    expect(cancelMock).toHaveBeenCalled();
+  });
+
+  it("only Aide's messages get Replay and Stop", async () => {
+    renderWith();
+    await askForKettle();
+
+    expect(
+      conversation().getAllByRole("button", { name: "Replay" }),
+    ).toHaveLength(1);
   });
 });

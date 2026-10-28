@@ -177,24 +177,39 @@ export interface SpeakOptions {
   onEnd?: () => void;
 }
 
-/** Speak `text` aloud, cancelling anything already being spoken. */
+/**
+ * Speak aloud, cancelling anything already being spoken. Several pieces are
+ * queued as separate utterances: Chrome cuts long utterances off after about
+ * 15 seconds. `onEnd` runs once, when the last piece ends or speech stops.
+ */
 export function speak(
-  text: string,
+  text: string | readonly string[],
   language: Language,
   { rate = 1, onEnd }: SpeakOptions = {},
 ): void {
   if (!canSpeak()) return;
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = SPEECH_LANG[language];
-  utterance.rate = rate;
+  const pieces = (typeof text === "string" ? [text] : text).filter(
+    (piece) => piece.trim() !== "",
+  );
   const voice = pickVoice(window.speechSynthesis.getVoices(), language);
-  if (voice) utterance.voice = voice;
-  if (onEnd) {
-    utterance.onend = onEnd;
-    utterance.onerror = onEnd;
-  }
+  let ended = false;
+  const end = () => {
+    if (ended) return;
+    ended = true;
+    onEnd?.();
+  };
+
   window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(utterance);
+  pieces.forEach((piece, index) => {
+    const utterance = new SpeechSynthesisUtterance(piece);
+    utterance.lang = SPEECH_LANG[language];
+    utterance.rate = rate;
+    if (voice) utterance.voice = voice;
+    utterance.onerror = end;
+    if (index === pieces.length - 1) utterance.onend = end;
+    window.speechSynthesis.speak(utterance);
+  });
+  if (pieces.length === 0) end();
 }
 
 export function stopSpeaking(): void {

@@ -8,6 +8,8 @@ export interface HealthResponse {
 
 export interface Offer {
   price: string;
+  /** The "was" price when the item is on sale. */
+  compare_at_price: string | null;
   currency: string;
   retailer: string;
   url: string;

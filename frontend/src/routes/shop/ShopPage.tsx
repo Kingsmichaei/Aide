@@ -9,11 +9,14 @@ import {
 } from "../../lib/api";
 import { demoShopperId } from "../../lib/config";
 import { formatMoney } from "../../lib/format";
+import { replyChunks } from "../../lib/readout";
 import { useSettings } from "../../lib/settings-context";
 import {
   canListen,
+  canSpeak,
   speak,
   speechMessage,
+  stopSpeaking,
   type ListenError,
 } from "../../lib/speech";
 import { ConfirmPanel } from "./ConfirmPanel";
@@ -36,6 +39,7 @@ export function ShopPage() {
   const shopperId = demoShopperId();
   const { settings } = useSettings();
   const voiceInput = canListen();
+  const voiceOutput = canSpeak();
   const inputId = useId();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
@@ -59,7 +63,18 @@ export function ShopPage() {
   ) {
     const message = { id: nextId.current++, from, text, products };
     setMessages((current) => [...current, message]);
-    if (from === "aide") setAnnouncement(text);
+    if (from === "aide") {
+      setAnnouncement(text);
+      if (settings.read_aloud)
+        say(replyChunks(text, products, settings.language));
+    }
+  }
+
+  function say(pieces: string[], slowly = false) {
+    const rate = slowly
+      ? Math.max(0.5, settings.voice_speed * 0.75)
+      : settings.voice_speed;
+    speak(pieces, settings.language, { rate });
   }
 
   async function talk(message: string, shown = message) {
@@ -141,6 +156,7 @@ export function ShopPage() {
     setOrder(updated);
     setStage("done");
     setAnnouncement(resultText(updated));
+    if (settings.read_aloud) say([resultText(updated)]);
   }
 
   function cancelOrder() {
@@ -166,6 +182,23 @@ export function ShopPage() {
         messages={messages}
         onChoose={choose}
         busy={busy || stage !== "chat"}
+        voice={
+          voiceOutput
+            ? {
+                onReplay: (message, slowly) => {
+                  say(
+                    replyChunks(
+                      message.text,
+                      message.products,
+                      settings.language,
+                    ),
+                    slowly,
+                  );
+                },
+                onStop: stopSpeaking,
+              }
+            : undefined
+        }
       />
 
       {busy && stage === "chat" && <p>Aide is thinking…</p>}
