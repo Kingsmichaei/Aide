@@ -9,9 +9,17 @@ import {
 } from "../../lib/api";
 import { demoShopperId } from "../../lib/config";
 import { formatMoney } from "../../lib/format";
+import { useSettings } from "../../lib/settings-context";
+import {
+  canListen,
+  speak,
+  speechMessage,
+  type ListenError,
+} from "../../lib/speech";
 import { ConfirmPanel } from "./ConfirmPanel";
 import { MessageList, type ChatMessage } from "./MessageList";
 import { PayPalCheckout } from "./PayPalCheckout";
+import { TalkButton } from "./TalkButton";
 
 type Stage = "chat" | "confirm" | "pay" | "done";
 
@@ -26,6 +34,8 @@ const RECHECK_TEXT: Record<ConfirmReason, (order: Order) => string> = {
 
 export function ShopPage() {
   const shopperId = demoShopperId();
+  const { settings } = useSettings();
+  const voiceInput = canListen();
   const inputId = useId();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
@@ -36,6 +46,7 @@ export function ShopPage() {
   const [error, setError] = useState<string | null>(null);
   const nextId = useRef(1);
   const resultRef = useRef<HTMLHeadingElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (stage === "done") resultRef.current?.focus();
@@ -75,6 +86,22 @@ export function ShopPage() {
     if (!text || busy) return;
     setDraft("");
     void talk(text);
+  }
+
+  function heardEverything(text: string) {
+    if (settings.auto_send) {
+      setDraft("");
+      void talk(text);
+    } else {
+      // Let the shopper check and fix the words before sending.
+      inputRef.current?.focus();
+    }
+  }
+
+  function listenFailed(listenError: ListenError) {
+    const message = speechMessage(listenError, settings.language);
+    setError(message);
+    speak(message, settings.language, { rate: settings.voice_speed });
   }
 
   function choose(product: Product) {
@@ -198,11 +225,26 @@ export function ShopPage() {
 
       {stage === "chat" && (
         <form onSubmit={onSubmit} className="mt-auto flex flex-col gap-3">
+          {voiceInput ? (
+            <TalkButton
+              language={settings.language}
+              disabled={busy}
+              onHeard={(text) => {
+                setError(null);
+                setDraft(text);
+              }}
+              onFinished={heardEverything}
+              onError={listenFailed}
+            />
+          ) : (
+            <p>{speechMessage("unsupported", settings.language)}</p>
+          )}
           <label htmlFor={inputId} className="font-semibold">
             Type your message
           </label>
           <textarea
             id={inputId}
+            ref={inputRef}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
@@ -217,7 +259,12 @@ export function ShopPage() {
           <button
             type="submit"
             disabled={busy}
-            className="min-h-16 rounded-2xl bg-blue-800 px-8 text-2xl font-semibold text-white hover:bg-blue-900 focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-blue-800 disabled:opacity-60 dark:focus-visible:outline-blue-300"
+            className={
+              // Talk to Aide is the main action when the browser can listen.
+              voiceInput
+                ? "min-h-16 rounded-2xl border-2 border-blue-800 px-8 text-2xl font-semibold focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-blue-800 disabled:opacity-60 dark:border-blue-300 dark:focus-visible:outline-blue-300"
+                : "min-h-16 rounded-2xl bg-blue-800 px-8 text-2xl font-semibold text-white hover:bg-blue-900 focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-blue-800 disabled:opacity-60 dark:focus-visible:outline-blue-300"
+            }
           >
             Send
           </button>

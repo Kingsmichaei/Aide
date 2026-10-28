@@ -1,0 +1,95 @@
+import { useEffect, useRef, useState } from "react";
+
+import type { Language } from "../../lib/api";
+import {
+  listen,
+  stopSpeaking,
+  type ListenError,
+  type Listening,
+} from "../../lib/speech";
+
+interface Props {
+  language: Language;
+  disabled: boolean;
+  /** The transcript so far, as the shopper speaks. */
+  onHeard: (text: string) => void;
+  /** Listening has ended and something was heard. */
+  onFinished: (text: string) => void;
+  onError: (error: ListenError) => void;
+}
+
+/**
+ * Press once to start listening, press again to stop. No hold-to-talk, which
+ * is hard with a tremor or limited grip. Space and Enter work because it is a
+ * real button. Callers should hide it when `canListen()` is false.
+ */
+export function TalkButton({
+  language,
+  disabled,
+  onHeard,
+  onFinished,
+  onError,
+}: Props) {
+  const [listening, setListening] = useState(false);
+  const session = useRef<Listening | undefined>(undefined);
+  const heard = useRef("");
+
+  // Leaving the screen mid-sentence throws the words away instead of sending.
+  useEffect(
+    () => () => {
+      heard.current = "";
+      session.current?.cancel();
+    },
+    [],
+  );
+
+  function start() {
+    stopSpeaking(); // Aide stops talking when the shopper starts.
+    heard.current = "";
+    const started = listen(language, {
+      onTranscript: (text) => {
+        heard.current = text;
+        onHeard(text);
+      },
+      onError,
+      onEnd: () => {
+        session.current = undefined;
+        setListening(false);
+        if (heard.current) onFinished(heard.current);
+      },
+    });
+    if (started) {
+      session.current = started;
+      setListening(true);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <button
+        type="button"
+        disabled={disabled && !listening}
+        onClick={() => {
+          if (session.current) session.current.stop();
+          else start();
+        }}
+        className="flex min-h-20 items-center justify-center gap-4 rounded-2xl bg-blue-800 px-8 text-2xl font-semibold text-white hover:bg-blue-900 focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-blue-800 disabled:opacity-60 dark:focus-visible:outline-blue-300"
+      >
+        {listening && (
+          <span
+            aria-hidden="true"
+            className="size-5 rounded-full bg-red-400 motion-safe:animate-pulse"
+          />
+        )}
+        {listening ? "Stop listening" : "Talk to Aide"}
+      </button>
+      {/* Deliberately not a live region: a screen reader talking now would be
+          picked up by the microphone. The button's new name says it instead. */}
+      {listening && (
+        <p className="text-center text-2xl font-bold">
+          Listening… Press the button again when you are done.
+        </p>
+      )}
+    </div>
+  );
+}

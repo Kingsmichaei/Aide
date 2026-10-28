@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import type { Language, ShopperSettings } from "../../lib/api";
 import { useSettings } from "../../lib/settings-context";
-import { canSpeak, speak } from "../../lib/speech";
+import { canListen, canSpeak, speak } from "../../lib/speech";
 
 const LANGUAGES: { value: Language; label: string }[] = [
   { value: "en", label: "English" },
@@ -16,6 +16,11 @@ const TEXT_SIZES = [20, 24, 28, 32];
 const VOICE_SPEEDS = [
   { value: 0.8, label: "Slow" },
   { value: 1, label: "Normal" },
+];
+
+const ON_OFF = [
+  { value: "on", label: "On" },
+  { value: "off", label: "Off" },
 ];
 
 const VOICE_SAMPLE: Record<Language, string> = {
@@ -73,6 +78,16 @@ export function SettingsPage() {
         value={voiceSpeed}
         onChange={(voice_speed) => change({ voice_speed })}
       />
+
+      {canListen() && (
+        <Choices
+          legend="Send my message when I stop speaking"
+          name="auto_send"
+          options={ON_OFF}
+          value={settings.auto_send ? "on" : "off"}
+          onChange={(value) => change({ auto_send: value === "on" })}
+        />
+      )}
 
       {canSpeak() && (
         <button

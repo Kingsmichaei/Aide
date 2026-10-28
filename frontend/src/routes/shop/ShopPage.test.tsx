@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -9,6 +10,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../../lib/api";
 import type { PayPalSessionCallbacks } from "../../lib/paypal";
+import { DEFAULT_SETTINGS, SettingsContext } from "../../lib/settings-context";
+import { FakeRecognition } from "../../test/fakeSpeech";
 import { ShopPage } from "./ShopPage";
 
 vi.mock("../../lib/api", async (importOriginal) => {
@@ -235,5 +238,147 @@ describe("ShopPage", () => {
     expect(conversation().getByText(/Nothing was bought/)).toBeVisible();
     expect(screen.getByLabelText("Type your message")).toBeVisible();
     expect(api.confirmOrder).not.toHaveBeenCalled();
+  });
+});
+
+describe("Talk to Aide", () => {
+  const speakMock = vi.fn();
+  const cancelMock = vi.fn();
+
+  beforeEach(() => {
+    vi.stubGlobal("webkitSpeechRecognition", FakeRecognition);
+    vi.stubGlobal("speechSynthesis", {
+      speak: speakMock,
+      cancel: cancelMock,
+      getVoices: () => [],
+    });
+    vi.stubGlobal(
+      "SpeechSynthesisUtterance",
+      class {
+        lang = "";
+        rate = 1;
+        voice = null;
+        constructor(public text: string) {}
+      },
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    FakeRecognition.reset();
+  });
+
+  function renderWith(changes: Partial<api.ShopperSettings> = {}) {
+    const value = {
+      settings: { ...DEFAULT_SETTINGS, ...changes },
+      update: async () => {},
+    };
+    render(
+      <SettingsContext value={value}>
+        <ShopPage />
+      </SettingsContext>,
+    );
+  }
+
+  function pressTalk() {
+    fireEvent.click(screen.getByRole("button", { name: "Talk to Aide" }));
+    const recognition = FakeRecognition.last;
+    if (!recognition) throw new Error("not listening");
+    return recognition;
+  }
+
+  it("is hidden where the browser cannot listen, and typing still works", () => {
+    vi.unstubAllGlobals();
+    renderWith({ language: "es" });
+
+    expect(
+      screen.queryByRole("button", { name: "Talk to Aide" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/Puede escribir/)).toBeVisible();
+    expect(screen.getByLabelText("Type your message")).toBeVisible();
+  });
+
+  it("listens in the shopper's language and shows a live transcript", () => {
+    renderWith({ language: "es" });
+
+    const recognition = pressTalk();
+    act(() => {
+      recognition.hear(["necesito una", false]);
+    });
+
+    expect(recognition.lang).toBe("es-ES");
+    expect(
+      screen.getByRole("button", { name: "Stop listening" }),
+    ).toBeVisible();
+    expect(screen.getByText(/Listening…/)).toBeVisible();
+    expect(screen.getByLabelText("Type your message")).toHaveValue(
+      "necesito una",
+    );
+  });
+
+  it("stops Aide talking when the shopper starts", () => {
+    renderWith();
+    pressTalk();
+    expect(cancelMock).toHaveBeenCalled();
+  });
+
+  it("sends by itself when the shopper stops speaking (auto-send on)", async () => {
+    renderWith();
+
+    const recognition = pressTalk();
+    act(() => {
+      recognition.hear(["I need a kettle", true]);
+    });
+    act(() => {
+      recognition.end();
+    });
+
+    await waitFor(() => conversation().getByText("I found a kettle."));
+    expect(api.sendChat).toHaveBeenCalledWith(1, "I need a kettle");
+    expect(screen.getByLabelText("Type your message")).toHaveValue("");
+  });
+
+  it("leaves the words in the box to fix when auto-send is off", () => {
+    renderWith({ auto_send: false });
+
+    const recognition = pressTalk();
+    act(() => {
+      recognition.hear(["I need a kettel", true]);
+    });
+    act(() => {
+      recognition.end();
+    });
+
+    const box = screen.getByLabelText("Type your message");
+    expect(box).toHaveValue("I need a kettel");
+    expect(box).toHaveFocus();
+    expect(api.sendChat).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Talk to Aide" })).toBeVisible();
+  });
+
+  it("pressing again stops listening", () => {
+    renderWith();
+
+    const recognition = pressTalk();
+    fireEvent.click(screen.getByRole("button", { name: "Stop listening" }));
+
+    expect(recognition.stop).toHaveBeenCalled();
+  });
+
+  it("shows and speaks a plain message when the mic is blocked", () => {
+    renderWith({ voice_speed: 0.8 });
+
+    const recognition = pressTalk();
+    act(() => {
+      recognition.fail("not-allowed");
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "I can't use the microphone. Please allow it in your browser, or type instead.",
+    );
+    const [utterance] = speakMock.mock.calls[0] as [SpeechSynthesisUtterance];
+    expect(utterance.text).toMatch(/can't use the microphone/);
+    expect(utterance.rate).toBe(0.8);
+    expect(api.sendChat).not.toHaveBeenCalled();
   });
 });
