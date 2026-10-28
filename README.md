@@ -41,9 +41,11 @@ To shop end to end you also need:
 cd backend
 uv sync
 uv run alembic upgrade head
-uv run python -m app.seed   # demo shopper (Rosa, $100 per-order limit) and her caregiver (Sam)
+uv run python -m app.seed   # demo data: Rosa (shopper), Sam (caregiver), two months of orders
 uv run uvicorn app.main:app --reload
 ```
+
+The seed is safe to run again; it adds the demo orders only once. Rosa has a $100 per-order and $500 monthly limit and 15 orders over the last two months in five categories: one waits for Sam's approval and one was declined with a note. Seeded orders use made-up PayPal ids (`DEMO-...`), so they can't be captured or voided in the sandbox; place a real over-limit order to demo approving.
 
 Check it: <http://localhost:8000/health> should return `{"status":"ok"}`.
 
