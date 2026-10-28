@@ -14,13 +14,23 @@ import { FakeRecognition } from "../../test/fakeSpeech";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof api>();
-  return { ...actual, getSettings: vi.fn(), updateSettings: vi.fn() };
+  return {
+    ...actual,
+    getMe: vi.fn(),
+    getSettings: vi.fn(),
+    updateSettings: vi.fn(),
+  };
 });
 
 const speakMock = vi.fn();
 const cancelMock = vi.fn();
 
 beforeEach(() => {
+  vi.mocked(api.getMe).mockResolvedValue({
+    id: 1,
+    name: "Rosa",
+    role: "shopper",
+  });
   vi.mocked(api.getSettings).mockResolvedValue({
     language: "es",
     voice_speed: 0.8,

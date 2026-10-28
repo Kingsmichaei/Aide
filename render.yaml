@@ -21,6 +21,10 @@ services:
         value: SANDBOX
       - key: FRONTEND_URL # e.g. https://aide-web.onrender.com (no trailing slash)
         sync: false
+      - key: SECRET_KEY # signs the session cookie
+        generateValue: true
+      - key: COOKIE_SECURE
+        value: "true"
       - key: LLM_PROVIDER
         sync: false
       - key: LLM_API_KEY
@@ -43,16 +47,17 @@ services:
     buildCommand: npm ci && npm run build
     staticPublishPath: ./dist
     routes:
+      # The API is served from this site's origin, so the HTTP-only session
+      # cookie is first-party. Change the URL if Render named the API differently.
+      - type: rewrite
+        source: /api/*
+        destination: https://aide-api.onrender.com/*
       - type: rewrite
         source: /*
         destination: /index.html
     envVars:
-      - key: VITE_API_URL # e.g. https://aide-api.onrender.com
-        sync: false
       - key: VITE_PAYPAL_CLIENT_ID # same sandbox client id as PAYPAL_CLIENT_ID
         sync: false
-      - key: VITE_DEMO_SHOPPER_ID # id printed by the seed script
-        value: "1"
 
 databases:
   - name: aide-db

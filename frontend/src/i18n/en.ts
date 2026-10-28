@@ -7,6 +7,18 @@ export const en = {
     label: "Shopper",
     shop: "Shop",
     settings: "Settings",
+    signOut: "Sign out",
+  },
+  signIn: {
+    pageTitle: "Aide – Sign in",
+    heading: "Who is using Aide?",
+    demoNote:
+      "This is a demo. Choose a person to continue. There are no passwords.",
+    shopper: "Shopper",
+    caregiver: "Caregiver",
+    signInAs: (name: string) => `Sign in as ${name}`,
+    failed: "Could not sign in. Please try again.",
+    noUsers: "No people yet. Run the seed script first.",
   },
   shop: {
     pageTitle: "Aide – Shop",

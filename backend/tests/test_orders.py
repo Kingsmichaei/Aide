@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.auth import current_user
 from app.db import get_session
 from app.deps import get_channel3, get_paypal
 from app.main import app
@@ -78,6 +79,10 @@ def client(session: Session, channel3: FakeChannel3, paypal: FakePayPal) -> Iter
         yield session
 
     app.dependency_overrides[get_session] = override_session
+    # Signed in as the test's shopper; access rules have their own tests in test_auth.
+    app.dependency_overrides[current_user] = lambda: session.scalars(
+        select(User).where(User.role == Role.shopper).order_by(User.id)
+    ).first()
     app.dependency_overrides[get_channel3] = lambda: channel3
     app.dependency_overrides[get_paypal] = lambda: paypal
     yield TestClient(app)

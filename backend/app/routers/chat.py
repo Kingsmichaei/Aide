@@ -9,9 +9,10 @@ from app.agent.llm import LLMClient, LLMError
 from app.agent.loop import run_turn
 from app.agent.prompts import system_prompt
 from app.agent.tools import ToolContext
+from app.auth import CurrentUser, check_is_shopper
 from app.db import get_session
 from app.deps import get_channel3, get_llm
-from app.models import Conversation, Role, User
+from app.models import Conversation
 from app.schemas import OrderOut
 from app.services.channel3 import Channel3Client, Product
 from app.services.orders import blocked_categories
@@ -39,10 +40,10 @@ async def chat(
     session: Annotated[Session, Depends(get_session)],
     channel3: Annotated[Channel3Client, Depends(get_channel3)],
     llm: Annotated[LLMClient, Depends(get_llm)],
+    user: CurrentUser,
 ) -> ChatOut:
-    shopper = session.get(User, body.shopper_id)
-    if shopper is None or shopper.role != Role.shopper:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Shopper not found")
+    check_is_shopper(user, body.shopper_id)
+    shopper = user
 
     conversation = session.scalar(
         select(Conversation)

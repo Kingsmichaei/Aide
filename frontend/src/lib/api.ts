@@ -1,6 +1,23 @@
-export const API_URL = (
-  import.meta.env.VITE_API_URL ?? "http://localhost:8000"
-).replace(/\/$/, "");
+// "/api" is the same origin as the app: Vite (dev) and Render (prod) forward it
+// to the API, so the HTTP-only session cookie just works.
+export const API_URL = (import.meta.env.VITE_API_URL ?? "/api").replace(
+  /\/$/,
+  "",
+);
+
+export type Role = "shopper" | "caregiver";
+
+export interface SessionUser {
+  id: number;
+  name: string;
+  role: Role;
+}
+
+export interface CaredForShopper {
+  id: number;
+  name: string;
+  language: Language;
+}
 
 export interface HealthResponse {
   status: string;
@@ -98,7 +115,11 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, init);
+  // "include" also sends the cookie if VITE_API_URL points at another origin.
+  const response = await fetch(`${API_URL}${path}`, {
+    credentials: "include",
+    ...init,
+  });
   if (!response.ok) {
     let detail: unknown = null;
     try {
@@ -108,6 +129,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new ApiError(response.status, detail);
   }
+  if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
 
@@ -131,6 +153,26 @@ export async function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
   return (await response.json()) as HealthResponse;
 }
 
+export function getUsers(): Promise<SessionUser[]> {
+  return request("/auth/users");
+}
+
+export function signIn(userId: number): Promise<SessionUser> {
+  return post("/auth/session", { user_id: userId });
+}
+
+export function getMe(): Promise<SessionUser> {
+  return request("/auth/me");
+}
+
+export function signOut(): Promise<void> {
+  return send("DELETE", "/auth/session");
+}
+
+export function getCaredForShoppers(): Promise<CaredForShopper[]> {
+  return request("/care/shoppers");
+}
+
 export function sendChat(
   shopperId: number,
   message: string,
@@ -138,7 +180,6 @@ export function sendChat(
   return post("/chat", { shopper_id: shopperId, message });
 }
 
-/** Send exactly what the shopper saw; the server refuses if anything changed. */
 /**
  * Confirm exactly the order the shopper was shown and read. For a spoken
  * answer, pass the transcript: the server decides whether it was a yes.

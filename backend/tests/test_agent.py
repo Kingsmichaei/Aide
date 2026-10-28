@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.agent.llm import GeminiClient, History, LLMError, LLMTurn, ToolCall, ToolSpec
 from app.agent.tools import TOOLS
+from app.auth import current_user
 from app.db import get_session
 from app.deps import get_channel3, get_llm
 from app.main import app
@@ -114,6 +115,10 @@ def make_client(session: Session, channel3: FakeChannel3, llm: object) -> TestCl
         yield session
 
     app.dependency_overrides[get_session] = override_session
+    # Signed in as the test's shopper; access rules have their own tests in test_auth.
+    app.dependency_overrides[current_user] = lambda: session.scalars(
+        select(User).where(User.role == Role.shopper).order_by(User.id)
+    ).first()
     app.dependency_overrides[get_channel3] = lambda: channel3
     app.dependency_overrides[get_llm] = lambda: llm
     return TestClient(app)

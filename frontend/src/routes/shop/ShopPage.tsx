@@ -10,7 +10,7 @@ import {
   type Order,
   type Product,
 } from "../../lib/api";
-import { demoShopperId } from "../../lib/config";
+import { useCurrentUser } from "../../lib/session";
 import { readBack, replyChunks } from "../../lib/readout";
 import { useSettings } from "../../lib/settings-context";
 import {
@@ -48,7 +48,7 @@ function recheckText(
 }
 
 export function ShopPage() {
-  const shopperId = demoShopperId();
+  const shopperId = useCurrentUser().id;
   const { settings, update } = useSettings();
   const { t, language } = useI18n();
   const voiceInput = canListen();

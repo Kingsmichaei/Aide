@@ -1,11 +1,12 @@
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.auth import CurrentUser, check_is_shopper
 from app.db import get_session
-from app.models import Role, User
+from app.models import User
 
 router = APIRouter(prefix="/shoppers", tags=["shoppers"])
 
@@ -31,26 +32,23 @@ class SettingsPatch(BaseModel):
 
 
 @router.get("/{shopper_id}/settings")
-def get_settings(shopper_id: int, session: Annotated[Session, Depends(get_session)]) -> Settings:
-    return _settings(_shopper(session, shopper_id))
+def get_settings(shopper_id: int, user: CurrentUser) -> Settings:
+    check_is_shopper(user, shopper_id)
+    return _settings(user)
 
 
 @router.patch("/{shopper_id}/settings")
 def update_settings(
-    shopper_id: int, body: SettingsPatch, session: Annotated[Session, Depends(get_session)]
+    shopper_id: int,
+    body: SettingsPatch,
+    user: CurrentUser,
+    session: Annotated[Session, Depends(get_session)],
 ) -> Settings:
-    shopper = _shopper(session, shopper_id)
+    check_is_shopper(user, shopper_id)
     for field, value in body.model_dump(exclude_unset=True, exclude_none=True).items():
-        setattr(shopper, field, value)
+        setattr(user, field, value)
     session.commit()
-    return _settings(shopper)
-
-
-def _shopper(session: Session, shopper_id: int) -> User:
-    shopper = session.get(User, shopper_id)
-    if shopper is None or shopper.role != Role.shopper:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Shopper not found")
-    return shopper
+    return _settings(user)
 
 
 def _settings(shopper: User) -> Settings:

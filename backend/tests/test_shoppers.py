@@ -2,8 +2,10 @@ from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.auth import current_user
 from app.db import get_session
 from app.main import app
 from app.models import Role, User
@@ -15,6 +17,10 @@ def client(session: Session) -> Iterator[TestClient]:
         yield session
 
     app.dependency_overrides[get_session] = override_session
+    # Signed in as the test's shopper; access rules have their own tests in test_auth.
+    app.dependency_overrides[current_user] = lambda: session.scalars(
+        select(User).where(User.role == Role.shopper).order_by(User.id)
+    ).first()
     yield TestClient(app)
     app.dependency_overrides.clear()
 
@@ -75,9 +81,11 @@ def test_patch_rejects_out_of_range_values(
     assert client.patch(f"/shoppers/{shopper_id}/settings", json=body).status_code == 422
 
 
-def test_caregiver_is_not_a_shopper(client: TestClient, session: Session) -> None:
+def test_shopper_cannot_see_someone_elses_settings(
+    client: TestClient, session: Session, shopper_id: int
+) -> None:
     caregiver = User(name="Sam", role=Role.caregiver)
     session.add(caregiver)
     session.commit()
 
-    assert client.get(f"/shoppers/{caregiver.id}/settings").status_code == 404
+    assert client.get(f"/shoppers/{caregiver.id}/settings").status_code == 403

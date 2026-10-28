@@ -7,6 +7,18 @@ export const fr: Messages = {
     label: "Acheteur",
     shop: "Acheter",
     settings: "Réglages",
+    signOut: "Se déconnecter",
+  },
+  signIn: {
+    pageTitle: "Aide – Connexion",
+    heading: "Qui utilise Aide ?",
+    demoNote:
+      "Ceci est une démonstration. Choisissez une personne pour continuer. Il n'y a pas de mot de passe.",
+    shopper: "Acheteur",
+    caregiver: "Aidant",
+    signInAs: (name) => `Se connecter en tant que ${name}`,
+    failed: "Connexion impossible. Réessayez.",
+    noUsers: "Personne pour l'instant. Lancez d'abord le script de données.",
   },
   shop: {
     pageTitle: "Aide – Acheter",

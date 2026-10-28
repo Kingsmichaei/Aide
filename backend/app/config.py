@@ -1,6 +1,8 @@
+import secrets
 from functools import lru_cache
+from typing import Literal
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -21,6 +23,16 @@ class Settings(BaseSettings):
     kernel_api_key: str = ""
     render_api_key: str = ""
     frontend_url: str = "http://localhost:5173"
+    # Signs the session cookie. Set it in production; the random default means
+    # everyone is signed out whenever the server restarts.
+    secret_key: str = Field(default_factory=lambda: secrets.token_urlsafe(32))
+    # The app is served from one origin (/api is proxied), so Lax works. Secure
+    # must be on in production (https) and off for http://localhost.
+    # Fallback if a proxy ever drops the cookie: point VITE_API_URL at the API,
+    # set COOKIE_SAMESITE=none and COOKIE_SECURE=true. Safari blocks such
+    # cross-site cookies, so prefer fixing the proxy.
+    cookie_secure: bool = False
+    cookie_samesite: Literal["lax", "strict", "none"] = "lax"
 
     @field_validator("database_url")
     @classmethod
@@ -30,6 +42,12 @@ class Settings(BaseSettings):
             if value.startswith(prefix):
                 return "postgresql+psycopg://" + value.removeprefix(prefix)
         return value
+
+    @field_validator("secret_key")
+    @classmethod
+    def random_if_blank(cls, value: str) -> str:
+        # `SECRET_KEY=` in .env means "not set", never an empty signing key.
+        return value or secrets.token_urlsafe(32)
 
     @field_validator("paypal_environment")
     @classmethod

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routers import chat, health, orders, shoppers
+from app.routers import auth, care, chat, health, orders, shoppers
 
 app = FastAPI(title="Aide API")
 
@@ -15,6 +15,8 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(auth.router)
+app.include_router(care.router)
 app.include_router(orders.router)
 app.include_router(chat.router)
 app.include_router(shoppers.router)

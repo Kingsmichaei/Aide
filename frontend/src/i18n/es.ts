@@ -6,6 +6,18 @@ export const es: Messages = {
     label: "Comprador",
     shop: "Comprar",
     settings: "Ajustes",
+    signOut: "Cerrar sesión",
+  },
+  signIn: {
+    pageTitle: "Aide – Entrar",
+    heading: "¿Quién usa Aide?",
+    demoNote:
+      "Esto es una demostración. Elija una persona para continuar. No hay contraseñas.",
+    shopper: "Comprador",
+    caregiver: "Cuidador",
+    signInAs: (name) => `Entrar como ${name}`,
+    failed: "No se pudo entrar. Inténtelo otra vez.",
+    noUsers: "Todavía no hay personas. Ejecute primero el script de datos.",
   },
   shop: {
     pageTitle: "Aide – Comprar",

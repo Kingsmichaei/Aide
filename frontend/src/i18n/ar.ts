@@ -6,6 +6,17 @@ export const ar: Messages = {
     label: "المتسوق",
     shop: "تسوق",
     settings: "الإعدادات",
+    signOut: "تسجيل الخروج",
+  },
+  signIn: {
+    pageTitle: "Aide – تسجيل الدخول",
+    heading: "من يستخدم Aide؟",
+    demoNote: "هذا عرض تجريبي. اختر شخصاً للمتابعة. لا توجد كلمات مرور.",
+    shopper: "متسوق",
+    caregiver: "مقدم رعاية",
+    signInAs: (name) => `الدخول باسم ${name}`,
+    failed: "تعذّر تسجيل الدخول. حاول مرة أخرى.",
+    noUsers: "لا يوجد أشخاص بعد. شغّل سكربت البيانات أولاً.",
   },
   shop: {
     pageTitle: "Aide – تسوق",

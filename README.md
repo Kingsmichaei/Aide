@@ -23,6 +23,8 @@ cp frontend/.env.example frontend/.env  # front end
 
 The defaults work for local development. The back end stores its data in a SQLite file, `backend/aide.db`, so you don't need to install a database. To develop against Postgres instead, set `DATABASE_URL=postgresql://user:password@localhost:5432/aide`. The back end reads `backend/.env` and the repo-root `.env`. The front end reads only `frontend/.env`, and Vite builds those `VITE_*` values into the bundle, so never put secrets there.
 
+The front end calls the API at `/api` on its own origin. In development, Vite forwards `/api` to `http://localhost:8000`; on Render, a rewrite rule does the same. Keeping one origin lets the sign-in cookie be HTTP-only and first-party. Leave `VITE_API_URL` unset.
+
 To shop end to end you also need:
 
 | Key | Where to get it |
@@ -31,6 +33,7 @@ To shop end to end you also need:
 | `CHANNEL3_API_KEY` | Your Channel3 dashboard |
 | `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` | developer.paypal.com → Apps & Credentials → **Sandbox** → your app |
 | `VITE_PAYPAL_CLIENT_ID` (in `frontend/.env`) | The same sandbox client id as `PAYPAL_CLIENT_ID` |
+| `SECRET_KEY` | Optional locally: any long random string. Without it you are signed out whenever the back end restarts. |
 
 ### Back end (http://localhost:8000)
 
@@ -38,11 +41,9 @@ To shop end to end you also need:
 cd backend
 uv sync
 uv run alembic upgrade head
-uv run python -m app.seed   # demo shopper (Rosa, $100 per-order limit) and caregiver (Sam)
+uv run python -m app.seed   # demo shopper (Rosa, $100 per-order limit) and her caregiver (Sam)
 uv run uvicorn app.main:app --reload
 ```
-
-The seed script prints the shopper's id. If it is not `1`, set `VITE_DEMO_SHOPPER_ID` in `frontend/.env`.
 
 Check it: <http://localhost:8000/health> should return `{"status":"ok"}`.
 
@@ -62,7 +63,7 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:5173/shop> or <http://localhost:5173/care>. Each page shows whether it can reach the API.
+Open <http://localhost:5173/signin> and choose who to be: Rosa opens the shopper app at `/shop`, Sam opens the caregiver dashboard at `/care`. This demo has no passwords; the choice is kept in an HTTP-only cookie. Shoppers can only see their own data, and caregivers only the shoppers linked to them.
 
 Tests, lint and build:
 
@@ -86,19 +87,24 @@ uv run alembic upgrade head
 Look over the generated file before you commit it. On SQLite, Alembic uses batch mode, which rebuilds a table to change a column. Postgres runs the same migration on deploy, so keep migrations to portable column types.
 
 To start again with an empty local database, delete `backend/aide.db` and run `uv run alembic upgrade head` and `uv run python -m app.seed`.
+
+## Deploy to Render
+
+`render.yaml` is a Render Blueprint that defines three resources:
+
 | Name | Type | What it is |
 | --- | --- | --- |
 | `aide-api` | Python web service | The FastAPI back end. It runs migrations, then starts uvicorn. |
-| `aide-web` | Static site | The built front end. All paths fall back to `index.html`. |
+| `aide-web` | Static site | The built front end. `/api/*` is forwarded to `aide-api`; every other path falls back to `index.html`. |
 | `aide-db` | Postgres | The database, reachable only from inside Render. |
 
 1. Push the repo to GitHub.
 2. In the Render Dashboard choose **New → Blueprint** and select the repo.
 3. Render asks for every variable marked `sync: false`. Use these values:
    - `FRONTEND_URL`: `https://aide-web.onrender.com`, or whatever URL Render gives the static site. Leave off the trailing slash.
-   - `VITE_API_URL`: `https://aide-api.onrender.com`, or the API's URL.
    - The sponsor and LLM keys. These can stay blank until the features that use them exist.
-4. Click **Apply**. If Render gave either service a different URL, update `FRONTEND_URL` and `VITE_API_URL`. Then redeploy `aide-web`, because Vite builds `VITE_API_URL` into the bundle.
+4. Click **Apply**. Render generates `SECRET_KEY` for you. If Render gave the API a URL other than `https://aide-api.onrender.com`, change the `/api/*` rewrite in `render.yaml` (or in the static site's **Redirects/Rewrites** settings). If the static site's URL differs, update `FRONTEND_URL`.
+5. Sign in on the deployed site and check that you stay signed in after a reload. If you don't, the rewrite is not passing the cookie: see the note on `COOKIE_SAMESITE` in `backend/app/config.py`.
 
 Free-plan notes:
 

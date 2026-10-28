@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as api from "../../lib/api";
 import type { PayPalSessionCallbacks } from "../../lib/paypal";
 import { MESSAGES } from "../../i18n";
+import { SessionContext } from "../../lib/session";
 import { DEFAULT_SETTINGS, SettingsContext } from "../../lib/settings-context";
 import { FakeRecognition } from "../../test/fakeSpeech";
 import { ShopPage } from "./ShopPage";
@@ -93,12 +94,21 @@ afterEach(() => {
   callbacks = null;
 });
 
+/** ShopPage lives inside the shop area, where Rosa (id 1) is signed in. */
+function SignedIn({ children }: { children: React.ReactNode }) {
+  return (
+    <SessionContext value={{ id: 1, name: "Rosa", role: "shopper" }}>
+      {children}
+    </SessionContext>
+  );
+}
+
 function conversation() {
   return within(screen.getByRole("list", { name: "Conversation" }));
 }
 
 async function searchForKettle() {
-  render(<ShopPage />);
+  render(<ShopPage />, { wrapper: SignedIn });
   fireEvent.change(screen.getByLabelText("Type your message"), {
     target: { value: "I need a kettle" },
   });
@@ -284,6 +294,7 @@ describe("Voice and languages", () => {
       <SettingsContext value={value}>
         <ShopPage />
       </SettingsContext>,
+      { wrapper: SignedIn },
     );
   }
 

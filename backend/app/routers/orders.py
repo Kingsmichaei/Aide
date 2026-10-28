@@ -11,9 +11,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
+from app.auth import CurrentUser, check_is_shopper
 from app.db import get_session
 from app.deps import get_channel3, get_paypal
-from app.models import Actor, ConfirmationMethod, Order, OrderStatus, Role, User
+from app.models import Actor, ConfirmationMethod, Order, OrderStatus, User
 from app.schemas import OrderOut
 from app.services import consent, limits
 from app.services.channel3 import Channel3Client, Channel3Error
@@ -71,10 +72,11 @@ class PayPalOut(BaseModel):
 
 
 @router.post("/draft", status_code=status.HTTP_201_CREATED)
-async def draft_order(body: DraftIn, session: SessionDep, channel3: Channel3Dep) -> OrderOut:
-    shopper = session.get(User, body.shopper_id)
-    if shopper is None or shopper.role != Role.shopper:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Shopper not found")
+async def draft_order(
+    body: DraftIn, session: SessionDep, channel3: Channel3Dep, user: CurrentUser
+) -> OrderOut:
+    check_is_shopper(user, body.shopper_id)
+    shopper = user
     try:
         product = await channel3.get_product(
             body.channel3_product_id, blocked_categories(session, shopper.id)
@@ -91,9 +93,9 @@ async def draft_order(body: DraftIn, session: SessionDep, channel3: Channel3Dep)
 
 @router.post("/{order_id}/confirm")
 async def confirm(
-    order_id: int, body: ConfirmIn, session: SessionDep, channel3: Channel3Dep
+    order_id: int, body: ConfirmIn, session: SessionDep, channel3: Channel3Dep, user: CurrentUser
 ) -> ConfirmOut:
-    order = _get(session, order_id)
+    order = _get(session, order_id, user)
     if order.status != OrderStatus.draft:
         raise HTTPException(status.HTTP_409_CONFLICT, f"Order is {order.status}, not a draft")
 
@@ -137,9 +139,9 @@ async def confirm(
 
 @router.post("/{order_id}/paypal")
 async def create_paypal_order(
-    order_id: int, session: SessionDep, channel3: Channel3Dep, paypal: PayPalDep
+    order_id: int, session: SessionDep, channel3: Channel3Dep, paypal: PayPalDep, user: CurrentUser
 ) -> PayPalOut:
-    order = _get(session, order_id)
+    order = _get(session, order_id, user)
     if order.status == OrderStatus.awaiting_shopper and order.paypal_order_id:
         return PayPalOut(paypal_order_id=order.paypal_order_id)
     if order.status != OrderStatus.draft or order.confirmed_total is None:
@@ -171,8 +173,10 @@ async def create_paypal_order(
 
 
 @router.post("/{order_id}/approved")
-async def approved(order_id: int, session: SessionDep, paypal: PayPalDep) -> OrderOut:
-    order = _get(session, order_id)
+async def approved(
+    order_id: int, session: SessionDep, paypal: PayPalDep, user: CurrentUser
+) -> OrderOut:
+    order = _get(session, order_id, user)
     if order.status in (OrderStatus.captured, OrderStatus.awaiting_caregiver):
         return OrderOut.of(order)  # already handled; safe to call twice
     if order.status != OrderStatus.awaiting_shopper or not order.paypal_order_id:
@@ -208,10 +212,12 @@ async def approved(order_id: int, session: SessionDep, paypal: PayPalDep) -> Ord
     return OrderOut.of(order)
 
 
-def _get(session: Session, order_id: int) -> Order:
+def _get(session: Session, order_id: int, user: User) -> Order:
+    """The order, if it belongs to the signed-in shopper."""
     order = session.get(Order, order_id)
     if order is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Order not found")
+    check_is_shopper(user, order.shopper_id)
     return order
 
 
