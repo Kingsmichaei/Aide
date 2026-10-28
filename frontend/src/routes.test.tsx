@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { SessionUser } from "./lib/api";
 import { routes } from "./routes";
@@ -55,6 +55,12 @@ function renderAt(path: string) {
   render(<RouterProvider router={router} />);
   return router;
 }
+
+// /care is loaded on demand; loading it (AG Grid, AG Charts) can outlast a
+// findBy wait on a slow machine, so load it once before the tests.
+beforeAll(async () => {
+  await import("./routes/care/CarePage");
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();

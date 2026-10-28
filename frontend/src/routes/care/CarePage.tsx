@@ -13,6 +13,7 @@ import {
 } from "../../lib/api";
 import { usePolling } from "../../lib/usePolling";
 import { ApprovalQueue } from "./ApprovalQueue";
+import { AskSpending } from "./AskSpending";
 import { LimitsForm } from "./LimitsForm";
 import { NotificationsBell } from "./NotificationsBell";
 import { OrderPanel } from "./OrderPanel";
@@ -118,6 +119,7 @@ function ShopperDashboard({ shopper }: { shopper: CaredForShopper }) {
             onOpen={setOpen}
           />
           <SpendCharts spending={spending} />
+          <AskSpending shopper={shopper} />
         </div>
         <ApprovalQueue onDecided={load} />
       </div>

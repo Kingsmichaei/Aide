@@ -144,6 +144,26 @@ export interface Spending {
   by_category: ChartPoint[];
 }
 
+export interface AskResponse {
+  /** False when the question was refused (e.g. "delete all orders"). */
+  answered: boolean;
+  /** One sentence. */
+  answer: string;
+  /** Chosen by the server from the grouping, never by the model. */
+  chart: "bar" | "donut" | "none";
+  currency: string;
+  rows: { label: string; total: string; count: number }[];
+  /** The fixed query template and the values it ran with. */
+  query: {
+    date_from: string;
+    date_to: string;
+    category: string | null;
+    retailer: string | null;
+    status: string;
+    group_by: "none" | "month" | "category" | "retailer";
+  } | null;
+}
+
 export interface LimitsInput {
   per_order_max: string;
   monthly_max: string;
@@ -337,6 +357,13 @@ export function getOrderDetail(
 
 export function getSpending(shopperId: number): Promise<Spending> {
   return request(`/care/shoppers/${shopperId}/spending`);
+}
+
+export function askAboutSpending(
+  shopperId: number,
+  question: string,
+): Promise<AskResponse> {
+  return post(`/care/shoppers/${shopperId}/ask`, { question });
 }
 
 export function getLimits(shopperId: number): Promise<Limits> {

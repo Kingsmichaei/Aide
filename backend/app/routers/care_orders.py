@@ -3,13 +3,16 @@ Every route needs the caregiver to look after the shopper (app.auth)."""
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.agent.llm import LLMClient
 from app.auth import CaredForShopper, SessionDep
+from app.deps import get_llm
 from app.models import (
     Approval,
     ConfirmationMethod,
@@ -22,6 +25,7 @@ from app.models import (
 )
 from app.services.orders import total
 from app.services.spending import spending
+from app.services.spending_questions import ChartType, SpendingQuery, answer_question
 
 router = APIRouter(prefix="/care/shoppers/{shopper_id}", tags=["care"])
 
@@ -195,3 +199,40 @@ def _conversation(session: Session, shopper_id: int) -> list[MessageOut]:
         if m.get("role") in ("user", "model") and m.get("text")
     ]
     return texts[-TRANSCRIPT_MESSAGES:]
+
+
+class AskIn(BaseModel):
+    question: str = Field(min_length=1, max_length=300)
+
+
+class AskRow(BaseModel):
+    label: str
+    total: Decimal
+    count: int
+
+
+class AskOut(BaseModel):
+    answered: bool  # False when the question was refused
+    answer: str  # one sentence
+    chart: ChartType  # chosen from the grouping, not by the model
+    currency: str
+    rows: list[AskRow]
+    query: SpendingQuery | None  # the template and values that ran
+
+
+@router.post("/ask")
+async def ask_about_spending(
+    body: AskIn,
+    shopper: CaredForShopper,
+    session: SessionDep,
+    llm: Annotated[LLMClient, Depends(get_llm)],
+) -> AskOut:
+    result = await answer_question(llm, session, shopper.id, shopper.name, body.question)
+    return AskOut(
+        answered=result.answered,
+        answer=result.answer,
+        chart=result.chart,
+        currency=result.currency,
+        rows=[AskRow(label=r.label, total=r.total, count=r.count) for r in result.rows],
+        query=result.query,
+    )

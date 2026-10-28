@@ -26,21 +26,24 @@ function rows(points: ChartPoint[], label: (raw: string) => string = (x) => x) {
   return points.map((p) => ({ label: label(p.label), total: Number(p.total) }));
 }
 
-export function monthOptions(
-  spending: Spending,
+/** Totals as bars in the app's blue, money on the axis and in tooltips. */
+export function barOptions(
+  points: ChartPoint[],
+  currency: string,
   dark: boolean,
+  label?: (raw: string) => string,
 ): AgChartOptions {
   const money = (value: number) =>
-    formatMoney(String(value), spending.currency, "en-US");
+    formatMoney(String(value), currency, "en-US");
   return {
     theme: dark ? "ag-default-dark" : "ag-default",
-    data: rows(spending.by_month, monthLabel),
+    data: rows(points, label),
     series: [
       {
         type: "bar",
         xKey: "label",
         yKey: "total",
-        yName: `Spent (${spending.currency})`,
+        yName: `Spent (${currency})`,
         fill: dark ? "#93c5fd" : "#1e40af",
         tooltip: {
           renderer: ({ datum }) => ({
@@ -63,13 +66,15 @@ export function monthOptions(
   };
 }
 
-export function categoryOptions(
-  spending: Spending,
+/** Shares of a total as a donut, money in tooltips. */
+export function donutOptions(
+  points: ChartPoint[],
+  currency: string,
   dark: boolean,
 ): AgChartOptions {
   return {
     theme: dark ? "ag-default-dark" : "ag-default",
-    data: rows(spending.by_category),
+    data: rows(points),
     series: [
       {
         type: "donut",
@@ -80,14 +85,24 @@ export function categoryOptions(
         tooltip: {
           renderer: ({ datum }) => ({
             title: String(datum.label),
-            content: formatMoney(
-              String(datum.total),
-              spending.currency,
-              "en-US",
-            ),
+            content: formatMoney(String(datum.total), currency, "en-US"),
           }),
         },
       },
     ],
   };
+}
+
+export function monthOptions(
+  spending: Spending,
+  dark: boolean,
+): AgChartOptions {
+  return barOptions(spending.by_month, spending.currency, dark, monthLabel);
+}
+
+export function categoryOptions(
+  spending: Spending,
+  dark: boolean,
+): AgChartOptions {
+  return donutOptions(spending.by_category, spending.currency, dark);
 }
