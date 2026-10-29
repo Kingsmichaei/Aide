@@ -1,9 +1,9 @@
-"""'Ask about spending': answer a caregiver's question from a fixed, safe query.
+"""'Ask about your spending': answer a question from a fixed, safe query.
 
 The model never writes SQL. It may call one tool, `query_spending`, whose
 arguments are a few typed filters (date range, category, store, status) and a
 grouping (none, month, category or store). We validate them, build the query
-ourselves (read-only, one shopper only), then ask the model for one sentence
+ourselves (read-only, one user only), then ask the model for one sentence
 about the numbers. Anything else (e.g. "delete all orders") is refused.
 """
 
@@ -18,8 +18,8 @@ from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.agent.llm import History, LLMClient, LLMError, ToolSpec
-from app.models import Limit, Order, OrderStatus
+from app.integrations.llm import History, LLMClient, LLMError, ToolSpec
+from app.models import Order, OrderStatus, User
 
 ChartType = Literal["bar", "donut", "none"]
 GroupBy = Literal["none", "month", "category", "retailer"]
@@ -40,8 +40,8 @@ class SpendingQuery(BaseModel):
     date_to: date
     category: str | None = None
     retailer: str | None = None
-    # Paid orders by default; the caregiver may ask about waiting or declined ones.
-    status: Literal["captured", "awaiting_caregiver", "voided", "refunded"] = "captured"
+    # Paid orders by default; they may ask about held, voided or refunded ones.
+    status: Literal["captured", "authorized", "voided", "refunded", "failed"] = "captured"
     group_by: GroupBy = "none"
 
     @model_validator(mode="after")
@@ -73,7 +73,7 @@ class Answer:
 QUERY_TOOL = ToolSpec(
     name="query_spending",
     description=(
-        "Total the shopper's orders, filtered and optionally grouped. Dates are inclusive "
+        "Total the user's orders, filtered and optionally grouped. Dates are inclusive "
         "(YYYY-MM-DD). Leave category, retailer or status out to include all."
     ),
     parameters={
@@ -85,7 +85,7 @@ QUERY_TOOL = ToolSpec(
             "retailer": {"type": "string", "description": "One of the known stores"},
             "status": {
                 "type": "string",
-                "enum": ["captured", "awaiting_caregiver", "voided", "refunded"],
+                "enum": ["captured", "authorized", "voided", "refunded", "failed"],
                 "description": "captured = paid (default)",
             },
             "group_by": {"type": "string", "enum": ["none", "month", "category", "retailer"]},
@@ -99,7 +99,7 @@ CANNOT_TOOL = ToolSpec(
     parameters={"type": "object", "properties": {"reason": {"type": "string"}}},
 )
 
-SYSTEM = """You answer a caregiver's questions about what the person they look after spent.
+SYSTEM = """You answer a person's questions about their own spending.
 Today is {today}. The person is called {name}. Amounts are in {currency}.
 Known categories: {categories}. Known stores: {retailers}.
 
@@ -109,26 +109,24 @@ Known categories: {categories}. Known stores: {retailers}.
 2. If the question asks to change, delete or do anything other than read spending, or
    is not about spending at all, call cannot_answer.
 3. When you get the result, reply with ONE plain sentence (at most 30 words) using only
-   the numbers in the result. Use the person's name; never guess "he" or "she"."""
+   the numbers in the result. Speak to them as "you"."""
 
 
 async def answer_question(
     llm: LLMClient,
     session: Session,
-    shopper_id: int,
-    shopper_name: str,
+    user: User,
     question: str,
     today: date | None = None,
 ) -> Answer:
     today = today or datetime.now(UTC).date()
-    limit = session.get(Limit, shopper_id)
-    currency = limit.currency if limit else "USD"
+    user_id, user_name, currency = user.id, user.name, user.currency
     system = SYSTEM.format(
         today=today.isoformat(),
-        name=shopper_name,
+        name=user_name,
         currency=currency,
-        categories=", ".join(_known(session, shopper_id, Order.category)) or "none yet",
-        retailers=", ".join(_known(session, shopper_id, Order.retailer)) or "none yet",
+        categories=", ".join(_known(session, user_id, Order.category)) or "none yet",
+        retailers=", ".join(_known(session, user_id, Order.retailer)) or "none yet",
     )
     tools = [QUERY_TOOL, CANNOT_TOOL]
     history: History = [{"role": "user", "text": question}]
@@ -145,7 +143,7 @@ async def answer_question(
     except ValidationError:
         return Answer(answered=False, answer=REFUSAL, currency=currency)
 
-    rows = run_query(session, shopper_id, currency, query)
+    rows = run_query(session, user_id, currency, query)
     result = {
         "currency": currency,
         "rows": [{"label": r.label, "total": str(r.total), "orders": r.count} for r in rows],
@@ -165,7 +163,7 @@ async def answer_question(
         sentence = " ".join((await llm.generate(system, history, tools)).text.split())
     return Answer(
         answered=True,
-        answer=sentence[:300] or _plain_sentence(shopper_name, rows, currency, query),
+        answer=sentence[:300] or _plain_sentence(rows, currency, query),
         chart=_chart_for(query.group_by),
         currency=currency,
         rows=rows,
@@ -173,15 +171,15 @@ async def answer_question(
     )
 
 
-def run_query(session: Session, shopper_id: int, currency: str, query: SpendingQuery) -> list[Row]:
-    """The template: filter one shopper's orders, then total them (optionally grouped).
+def run_query(session: Session, user_id: int, currency: str, query: SpendingQuery) -> list[Row]:
+    """The template: filter one user's orders, then total them (optionally grouped).
     Built with the ORM from validated values only; it can only read."""
     start = datetime.combine(query.date_from, datetime.min.time(), tzinfo=UTC)
     end = datetime.combine(query.date_to + timedelta(days=1), datetime.min.time(), tzinfo=UTC)
     # Paid orders are dated by payment (as in the monthly limit); others by creation.
     when = Order.status_changed_at if query.status == "captured" else Order.created_at
     statement = select(Order).where(
-        Order.shopper_id == shopper_id,
+        Order.user_id == user_id,
         Order.currency == currency,
         Order.status == OrderStatus(query.status),
         when >= start,
@@ -220,21 +218,27 @@ def _label(order: Order, group_by: GroupBy) -> str:
 
 def _chart_for(group_by: GroupBy) -> ChartType:
     # Chosen by us, not the model: time and stores as bars, shares as a donut.
-    return {"none": "none", "month": "bar", "retailer": "bar", "category": "donut"}[group_by]
+    charts: dict[GroupBy, ChartType] = {
+        "none": "none",
+        "month": "bar",
+        "retailer": "bar",
+        "category": "donut",
+    }
+    return charts[group_by]
 
 
-def _known(session: Session, shopper_id: int, column: Any) -> list[str]:
+def _known(session: Session, user_id: int, column: Any) -> list[str]:
     values = session.scalars(
-        select(column).where(Order.shopper_id == shopper_id, column.is_not(None)).distinct()
+        select(column).where(Order.user_id == user_id, column.is_not(None)).distinct()
     )
     return sorted(values)[:50]
 
 
-def _plain_sentence(name: str, rows: list[Row], currency: str, query: SpendingQuery) -> str:
+def _plain_sentence(rows: list[Row], currency: str, query: SpendingQuery) -> str:
     """Used if the model gives no sentence: the facts, plainly."""
     spent = sum((r.total for r in rows), Decimal(0))
     orders = sum(r.count for r in rows)
     return (
-        f"{name} spent {spent:.2f} {currency} on {orders} order{'s' if orders != 1 else ''} "
+        f"You spent {spent:.2f} {currency} on {orders} order{'s' if orders != 1 else ''} "
         f"from {query.date_from.isoformat()} to {query.date_to.isoformat()}."
     )

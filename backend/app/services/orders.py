@@ -1,14 +1,20 @@
-"""Order state changes and price re-checks shared by the order endpoints."""
+"""Orders: drafting, the user's list, state changes and price re-checks.
+
+Shared by the orders API, checkout and the agent.
+"""
 
 import enum
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Actor, Limit, Order, OrderEvent, OrderStatus
-from app.services.channel3 import Channel3Client, Offer, ProductDetail
+from app.core.errors import NotFound, Upstream
+from app.integrations.channel3 import Channel3Client, Channel3Error, Offer, ProductDetail
+from app.models import Actor, Order, OrderEvent, OrderStatus
+from app.services.rules import blocked_categories
 
 PRICE_TOLERANCE = Decimal("0.05")  # CLAUDE.md payment rule 4
 
@@ -21,7 +27,7 @@ class RecheckResult(enum.StrEnum):
 
 
 def total(order: Order) -> Decimal:
-    """Full price the shopper pays. Channel3 has no delivery data yet, so delivery is 0."""
+    """Full price the user pays. Channel3 has no delivery data yet, so delivery is 0."""
     return order.price
 
 
@@ -31,6 +37,7 @@ def record(
     actor: Actor,
     event: str,
     to_status: OrderStatus | None = None,
+    note: str | None = None,
     **detail: Any,
 ) -> None:
     """Log a state change on the order; also moves it to `to_status` if given."""
@@ -42,6 +49,7 @@ def record(
             from_status=order.status,
             to_status=new_status,
             actor=actor,
+            note=note,
             detail={"event": event, **{k: _jsonable(v) for k, v in detail.items()}},
             created_at=now,
         )
@@ -51,13 +59,13 @@ def record(
         order.status_changed_at = now
 
 
-def create_draft(session: Session, shopper_id: int, product: ProductDetail, actor: Actor) -> Order:
+def create_draft(session: Session, user_id: int, product: ProductDetail, actor: Actor) -> Order:
     """Draft an order for the product's best offer. Drafting never moves money."""
     if product.best_offer is None:
         raise ValueError(f"Product {product.id} has no offer to draft")
     offer = product.best_offer
     order = Order(
-        shopper_id=shopper_id,
+        user_id=user_id,
         channel3_product_id=product.id,
         title=product.title,
         retailer=offer.retailer,
@@ -72,9 +80,48 @@ def create_draft(session: Session, shopper_id: int, product: ProductDetail, acto
     return order
 
 
-def blocked_categories(session: Session, shopper_id: int) -> list[str]:
-    limit = session.get(Limit, shopper_id)
-    return list(limit.blocked_categories) if limit else []
+async def draft_product(
+    session: Session, channel3: Channel3Client, user_id: int, product_id: str
+) -> Order:
+    """Draft an order for a Channel3 product the user tapped Buy on."""
+    try:
+        product = await channel3.get_product(product_id, blocked_categories(session, user_id))
+    except Channel3Error as error:
+        raise Upstream("Product search is unavailable") from error
+    if product is None or product.best_offer is None:
+        raise NotFound("Product not available")
+    order = create_draft(session, user_id, product, Actor.user)
+    session.commit()
+    return order
+
+
+def own(session: Session, order_id: int, user_id: int) -> Order:
+    """The order, if it belongs to the user. Others get "not found" (not
+    "forbidden"), so order ids can't be probed."""
+    order = session.get(Order, order_id)
+    if order is None or order.user_id != user_id:
+        raise NotFound("Order not found")
+    return order
+
+
+def placed(session: Session, user_id: int) -> list[Order]:
+    """Every order the user confirmed or went further with, newest first."""
+    return list(
+        session.scalars(
+            select(Order)
+            .where(Order.user_id == user_id, Order.status != OrderStatus.draft)
+            .order_by(Order.created_at.desc(), Order.id.desc())
+        )
+    )
+
+
+def events(session: Session, order: Order) -> list[OrderEvent]:
+    """The order's history, oldest first."""
+    return list(
+        session.scalars(
+            select(OrderEvent).where(OrderEvent.order_id == order.id).order_by(OrderEvent.id)
+        )
+    )
 
 
 async def recheck_price(
@@ -82,7 +129,7 @@ async def recheck_price(
 ) -> tuple[RecheckResult, Offer | None]:
     """Compare the order with Channel3's live offer from the same retailer."""
     product = await channel3.get_product(
-        order.channel3_product_id, blocked_categories(session, order.shopper_id)
+        order.channel3_product_id, blocked_categories(session, order.user_id)
     )
     if product is None or product.best_offer is None:
         return RecheckResult.unavailable, None
@@ -104,15 +151,20 @@ async def recheck_price(
 def apply_new_offer(
     session: Session, order: Order, result: RecheckResult, offer: Offer | None
 ) -> None:
-    """Move the draft to the live offer and drop the confirmation; the shopper must re-confirm."""
+    """Move the order to the live offer and drop the confirmation; the user must re-confirm."""
     old = {"price": order.price, "currency": order.currency, "retailer": order.retailer}
     if offer is not None:
         order.price, order.currency, order.retailer = offer.price, offer.currency, offer.retailer
+    clear_confirmation(order)
+    record(session, order, Actor.system, result.value, OrderStatus.draft, old=old, new=offer)
+
+
+def clear_confirmation(order: Order) -> None:
+    """Forget the user's yes; they will be asked again with the new figures."""
     order.confirmed_total = None
     order.confirmed_at = None
     order.confirmation_method = None
     order.confirmation_transcript = None
-    record(session, order, Actor.system, result.value, OrderStatus.draft, old=old, new=offer)
 
 
 def _jsonable(value: Any) -> Any:

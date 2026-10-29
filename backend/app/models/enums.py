@@ -1,29 +1,17 @@
 import enum
 
 
-class Role(enum.StrEnum):
-    shopper = "shopper"
-    caregiver = "caregiver"
-
-
-class CareLinkStatus(enum.StrEnum):
-    pending = "pending"
-    active = "active"
-    revoked = "revoked"
-
-
 class OrderStatus(enum.StrEnum):
-    draft = "draft"
-    awaiting_shopper = "awaiting_shopper"
-    awaiting_caregiver = "awaiting_caregiver"
-    captured = "captured"
-    voided = "voided"
+    """CLAUDE.md: draft -> confirmed -> awaiting_payment -> authorized -> captured."""
+
+    draft = "draft"  # Aide proposed it; nothing agreed yet
+    confirmed = "confirmed"  # the user said yes to these exact figures
+    awaiting_payment = "awaiting_payment"  # PayPal order created; the user approves in PayPal
+    authorized = "authorized"  # PayPal holds the money; capture comes next
+    captured = "captured"  # paid
+    voided = "voided"  # the hold was released; nothing was paid
     refunded = "refunded"
-
-
-class Decision(enum.StrEnum):
-    approved = "approved"
-    declined = "declined"
+    failed = "failed"  # payment did not go through
 
 
 class ConfirmationMethod(enum.StrEnum):
@@ -31,14 +19,12 @@ class ConfirmationMethod(enum.StrEnum):
     button = "button"
 
 
-class AlertKind(enum.StrEnum):
-    approval_needed = "approval_needed"  # to the caregiver: an order is over a limit
-    approved = "approved"  # to the shopper: the caregiver said yes, the order is paid
-    declined = "declined"  # to the shopper: the caregiver said no (maybe with a note)
-    payment_expired = "payment_expired"  # to the shopper: confirm and pay again
-
-
 class Actor(enum.StrEnum):
-    shopper = "shopper"
-    caregiver = "caregiver"
+    user = "user"
+    system = "system"
+
+
+class Theme(enum.StrEnum):
+    light = "light"
+    dark = "dark"
     system = "system"

@@ -1,38 +1,27 @@
-"""The one place alerts are sent from.
+"""The one place alerts are sent from, and the user's in-app inbox.
 
-Every alert is stored as an in-app notification. To add email or SMS later,
+Every alert is stored as an in-app notification. To add email or push later,
 write a function with the `Channel` signature and append it to CHANNELS: it
 receives the saved notification and its recipient.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection
+from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
-from app.models import AlertKind, CareLink, CareLinkStatus, Notification, Order, User
-from app.services.orders import total
+from app.models import Notification, User
 
 Channel = Callable[[Notification, User], None]
-CHANNELS: list[Channel] = []  # e.g. send_email, send_sms
+CHANNELS: list[Channel] = []  # e.g. send_email, send_push
 
 
-def send_alert(
-    session: Session, to: User, kind: AlertKind, order: Order | None = None, **params: Any
-) -> Notification:
+def send_alert(session: Session, to: User, kind: str, **payload: Any) -> Notification:
     """Alert one person. The caller commits, so the alert and the change it
-    describes are saved together."""
-    if order is not None:
-        params = {
-            "title": order.title,
-            "total": str(total(order)),
-            "currency": order.currency,
-            **params,
-        }
-    notification = Notification(
-        user_id=to.id, kind=kind, order_id=order and order.id, params=params
-    )
+    describes are saved together. `payload` must be JSON-safe."""
+    notification = Notification(user_id=to.id, kind=kind, payload=payload)
     session.add(notification)
     session.flush()
     for channel in CHANNELS:
@@ -40,25 +29,32 @@ def send_alert(
     return notification
 
 
-def caregivers_of(session: Session, shopper_id: int) -> list[User]:
+def unread_count(session: Session, user_id: int) -> int:
+    count = session.scalar(
+        select(func.count())
+        .select_from(Notification)
+        .where(Notification.user_id == user_id, Notification.read_at.is_(None))
+    )
+    return count or 0
+
+
+def newest(session: Session, user_id: int, limit: int) -> list[Notification]:
     return list(
         session.scalars(
-            select(User)
-            .join(CareLink, CareLink.caregiver_id == User.id)
-            .where(CareLink.shopper_id == shopper_id, CareLink.status == CareLinkStatus.active)
-            .order_by(User.id)
+            select(Notification)
+            .where(Notification.user_id == user_id)
+            .order_by(Notification.id.desc())
+            .limit(limit)
         )
     )
 
 
-def ask_caregivers(session: Session, order: Order) -> None:
-    """An order went over a limit: tell everyone who looks after the shopper."""
-    shopper = session.get(User, order.shopper_id)
-    for caregiver in caregivers_of(session, order.shopper_id):
-        send_alert(
-            session,
-            caregiver,
-            AlertKind.approval_needed,
-            order,
-            shopper_name=shopper.name if shopper else "",
-        )
+def mark_read(session: Session, user_id: int, ids: Collection[int] | None = None) -> None:
+    """Mark the user's unread notifications read: these ids, or all of them."""
+    query = update(Notification).where(
+        Notification.user_id == user_id, Notification.read_at.is_(None)
+    )
+    if ids is not None:
+        query = query.where(Notification.id.in_(ids))
+    session.execute(query.values(read_at=datetime.now(UTC)))
+    session.commit()

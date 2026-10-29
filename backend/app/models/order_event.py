@@ -1,10 +1,10 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Enum, ForeignKey, func
+from sqlalchemy import JSON, DateTime, Enum, ForeignKey, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db import Base
+from app.core.db import Base
 from app.models.enums import Actor, OrderStatus
 
 
@@ -23,5 +23,7 @@ class OrderEvent(Base):
         Enum(OrderStatus, name="to_status", native_enum=False, create_constraint=True)
     )
     actor: Mapped[Actor] = mapped_column(Enum(Actor, native_enum=False, create_constraint=True))
+    # A short human note, e.g. which spending-rule warnings the user accepted.
+    note: Mapped[str | None] = mapped_column(Text)
     detail: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
