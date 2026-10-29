@@ -1,4 +1,4 @@
-import { MESSAGES, money } from "../i18n";
+import { MESSAGES, money } from "@/i18n";
 import type { Language, Order, Product } from "./api";
 
 /** Why an option is worth a look. Built from real data, never made up. */
@@ -75,10 +75,10 @@ export function replyChunks(
 /**
  * Before asking to buy: item, store and full total, then the question. The
  * panel shows exactly these words and Aide says exactly these words, built from
- * the same order the server will be sent when the shopper says yes.
+ * the same order the server will be sent when the user says yes.
  */
 export function readBack(order: Order, language: Language): [string, string] {
-  const t = MESSAGES[language].confirm;
+  const t = MESSAGES[language].checkout;
   return [
     t.readBack(
       order.title,

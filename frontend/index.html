@@ -2,8 +2,29 @@
 <html lang="en" dir="ltr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#fbfbfc" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171c" media="(prefers-color-scheme: dark)" />
+    <meta name="description" content="Aide, your AI personal shopper: it finds it, watches the price, and buys with PayPal when you say yes." />
     <title>Aide</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+    />
+    <script>
+      // Paint the last-used theme before React loads, so dark mode never flashes white.
+      (function () {
+        try {
+          var saved = localStorage.getItem("aide-theme") || "system";
+          var dark =
+            saved === "dark" ||
+            (saved === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", dark);
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

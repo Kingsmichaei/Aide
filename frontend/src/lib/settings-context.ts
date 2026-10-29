@@ -1,19 +1,24 @@
 import { createContext, useContext } from "react";
 
-import type { ShopperSettings } from "./api";
+import type { Profile, ProfileChanges } from "./api";
 
-export const DEFAULT_SETTINGS: ShopperSettings = {
+/** Used until the profile loads (and in tests). */
+export const DEFAULT_SETTINGS: Profile = {
+  id: 0,
+  name: "",
+  email: null,
   language: "en",
+  currency: "USD",
+  theme: "system",
   voice_speed: 1,
-  text_size: 20,
   auto_send: true,
-  read_aloud: true,
+  read_aloud: false,
 };
 
 export interface SettingsValue {
-  settings: ShopperSettings;
+  settings: Profile;
   /** Applies the change at once and saves it; rejects (and rolls back) if saving fails. */
-  update: (changes: Partial<ShopperSettings>) => Promise<void>;
+  update: (changes: ProfileChanges) => Promise<void>;
 }
 
 export const SettingsContext = createContext<SettingsValue>({

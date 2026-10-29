@@ -45,9 +45,8 @@ describe("translations", () => {
             "shop.heading",
             "shop.aide",
             "shop.conversation",
-            "settings.px",
             "settings.normal",
-            "confirm.total",
+            "checkout.total",
           ].includes(path),
       );
       expect(same).toEqual([]);
@@ -55,7 +54,9 @@ describe("translations", () => {
   );
 
   it("fills in the values it is given", () => {
-    expect(MESSAGES.es.shop.priceChanged("10,00 US$")).toContain("10,00 US$");
+    expect(MESSAGES.es.checkout.priceChanged("10,00 US$")).toContain(
+      "10,00 US$",
+    );
     expect(MESSAGES.ar.card.from("target.com")).toContain("target.com");
   });
 

@@ -5,19 +5,31 @@ export const API_URL = (import.meta.env.VITE_API_URL ?? "/api").replace(
   "",
 );
 
-export type Role = "shopper" | "caregiver";
+export type Language = "en" | "es" | "fr" | "ar";
+export const CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD"] as const;
+export type Currency = (typeof CURRENCIES)[number];
+export type Theme = "light" | "dark" | "system";
 
 export interface SessionUser {
   id: number;
   name: string;
-  role: Role;
+  email: string | null;
 }
 
-export interface CaredForShopper {
+/** The signed-in user's profile and preferences (GET/PATCH /me). */
+export interface Profile {
   id: number;
   name: string;
+  email: string | null;
   language: Language;
+  currency: Currency;
+  theme: Theme;
+  voice_speed: number;
+  auto_send: boolean;
+  read_aloud: boolean;
 }
+
+export type ProfileChanges = Partial<Omit<Profile, "id">>;
 
 export interface Category {
   slug: string;
@@ -26,154 +38,19 @@ export interface Category {
   path: string[];
 }
 
-export const LIMIT_CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD"] as const;
-export type LimitCurrency = (typeof LIMIT_CURRENCIES)[number];
-
-export interface Limits {
-  /** False until a caregiver saves limits; until then no order needs approval. */
-  is_set: boolean;
-  per_order_max: string | null;
-  monthly_max: string | null;
-  currency: LimitCurrency;
+export interface SpendingRules {
+  /** Amounts are in this currency (the user's). */
+  currency: Currency;
+  monthly_budget: string | null;
+  ask_above: string | null;
   blocked_categories: Category[];
 }
 
-export interface WaitingOrder {
-  order_id: number;
-  shopper: CaredForShopper;
-  title: string;
-  retailer: string;
-  price: string;
-  total: string;
-  currency: string;
-  confirmation_method: "voice" | "button" | null;
-  /** What the shopper said when they confirmed by voice. */
-  confirmation_transcript: string | null;
-  waiting_since: string;
-  /** One sentence written by the AI from the order's facts. */
-  summary: string;
-}
-
-export type DecisionOutcome = "captured" | "voided" | "expired";
-
-export interface DecisionResult {
-  outcome: DecisionOutcome;
-  /** Plain words for the caregiver about what happened. */
-  message: string;
-  order: Order;
-}
-
-export type AlertKind =
-  "approval_needed" | "approved" | "declined" | "payment_expired";
-
-/** Stored as a kind plus params, so each app words it in its reader's language. */
-export interface AppNotification {
-  id: number;
-  kind: AlertKind;
-  order_id: number | null;
-  params: {
-    title?: string;
-    total?: string;
-    currency?: string;
-    shopper_name?: string;
-    caregiver_name?: string;
-    note?: string | null;
-  };
-  created_at: string;
-  read_at: string | null;
-}
-
-export interface NotificationsResponse {
-  unread: number;
-  items: AppNotification[];
-}
-
-export interface OrderStatusResponse {
-  order: Order;
-  /** Who decides on an over-limit order; null if nobody looks after the shopper. */
-  caregiver_name: string | null;
-  /** The caregiver's note with their latest decision. */
-  note: string | null;
-}
-
-export interface LedgerRow {
-  id: number;
-  created_at: string;
-  title: string;
-  retailer: string;
-  /** Top-level Channel3 category, e.g. "Health". */
-  category: string | null;
-  price: string;
-  total: string;
-  currency: string;
-  status: OrderStatus;
-  method: "voice" | "button" | null;
-  /** The caregiver who approved it; null when no approval was needed. */
-  approved_by: string | null;
-  declined_by: string | null;
-}
-
-export interface OrderDetail {
-  order: LedgerRow;
-  confirmation_transcript: string | null;
-  events: { at: string; event: string; actor: string; status: OrderStatus }[];
-  decisions: {
-    decision: "approved" | "declined";
-    caregiver: string;
-    note: string | null;
-    at: string;
-  }[];
-  /** The shopper's recent conversation with Aide, text only. */
-  conversation: { role: "shopper" | "aide"; text: string }[];
-}
-
-export interface ChartPoint {
-  label: string;
-  total: string;
-}
-
-export interface Spending {
-  currency: string;
-  spent_this_month: string;
-  monthly_max: string | null;
-  per_order_max: string | null;
-  limit_left: string | null;
-  waiting: number;
-  /** Labels like "2026-10", oldest first. */
-  by_month: ChartPoint[];
-  by_category: ChartPoint[];
-}
-
-export interface AskResponse {
-  /** False when the question was refused (e.g. "delete all orders"). */
-  answered: boolean;
-  /** One sentence. */
-  answer: string;
-  /** Chosen by the server from the grouping, never by the model. */
-  chart: "bar" | "donut" | "none";
-  currency: string;
-  rows: { label: string; total: string; count: number }[];
-  /** The fixed query template and the values it ran with. */
-  query: {
-    date_from: string;
-    date_to: string;
-    category: string | null;
-    retailer: string | null;
-    status: string;
-    group_by: "none" | "month" | "category" | "retailer";
-  } | null;
-}
-
-export interface LimitsInput {
-  per_order_max: string;
-  monthly_max: string;
-  currency: LimitCurrency;
+export interface SpendingRulesInput {
+  monthly_budget: string | null;
+  ask_above: string | null;
   /** Channel3 category slugs. */
   blocked_categories: string[];
-}
-
-export interface HealthResponse {
-  status: string;
 }
 
 export interface Offer {
@@ -195,15 +72,17 @@ export interface Product {
 
 export type OrderStatus =
   | "draft"
-  | "awaiting_shopper"
-  | "awaiting_caregiver"
+  | "confirmed"
+  | "awaiting_payment"
+  | "authorized"
   | "captured"
   | "voided"
-  | "refunded";
+  | "refunded"
+  | "failed";
 
 export interface Order {
   id: number;
-  shopper_id: number;
+  user_id: number;
   status: OrderStatus;
   channel3_product_id: string;
   title: string;
@@ -218,14 +97,30 @@ export interface Order {
   status_changed_at: string;
 }
 
-export type Language = "en" | "es" | "fr" | "ar";
+export interface OrderRow {
+  id: number;
+  created_at: string;
+  title: string;
+  retailer: string;
+  category: string | null;
+  price: string;
+  total: string;
+  currency: string;
+  status: OrderStatus;
+  method: "voice" | "button" | null;
+}
 
-export interface ShopperSettings {
-  language: Language;
-  voice_speed: number;
-  text_size: number;
-  auto_send: boolean;
-  read_aloud: boolean;
+export interface OrderDetail {
+  order: Order;
+  confirmation_transcript: string | null;
+  events: {
+    at: string;
+    event: string;
+    actor: "user" | "system";
+    status: OrderStatus;
+    note: string | null;
+  }[];
+  conversation: { role: "user" | "aide"; text: string }[];
 }
 
 export interface ChatResponse {
@@ -233,8 +128,19 @@ export interface ChatResponse {
   reply: string;
   products: Product[];
   draft_order: Order | null;
-  /** The reply's language when it differs from the shopper's setting. */
+  /** The reply's language when it differs from the user's setting. */
   reply_language: Language | null;
+}
+
+export type WarningCode = "ask_above" | "over_budget" | "other_currency";
+
+/** A spending rule this purchase would break. Buying still works after an extra yes. */
+export interface RuleWarning {
+  code: WarningCode;
+  /** English; the app words it itself from `code` and `amount`. */
+  message: string;
+  amount: string | null;
+  currency: string;
 }
 
 export type ConfirmReason =
@@ -242,6 +148,8 @@ export type ConfirmReason =
   | "price_changed"
   | "retailer_changed"
   | "unavailable"
+  // The purchase breaks a spending rule: ask once more, showing `warnings`.
+  | "needs_extra_confirmation"
   // Voice only: the server did not hear an explicit yes.
   | "declined"
   | "unclear";
@@ -249,7 +157,29 @@ export type ConfirmReason =
 export interface ConfirmResponse {
   confirmed: boolean;
   reason: ConfirmReason | null;
+  warnings: RuleWarning[];
   order: Order;
+}
+
+export interface ChartPoint {
+  label: string;
+  total: string;
+}
+
+export interface Spending {
+  currency: string;
+  spent_this_month: string;
+  orders_this_month: number;
+  monthly_budget: string | null;
+  budget_left: string | null;
+  ask_above: string | null;
+  /** Labels like "2026-10", oldest first. */
+  by_month: ChartPoint[];
+  by_category: ChartPoint[];
+}
+
+export interface HealthResponse {
+  status: string;
 }
 
 export class ApiError extends Error {
@@ -306,6 +236,8 @@ export async function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
   return (await response.json()) as HealthResponse;
 }
 
+// --- Sign-in -----------------------------------------------------------------
+
 export function getUsers(): Promise<SessionUser[]> {
   return request("/auth/users");
 }
@@ -314,7 +246,7 @@ export function signIn(userId: number): Promise<SessionUser> {
   return post("/auth/session", { user_id: userId });
 }
 
-export function getMe(): Promise<SessionUser> {
+export function getSessionUser(): Promise<SessionUser> {
   return request("/auth/me");
 }
 
@@ -322,88 +254,49 @@ export function signOut(): Promise<void> {
   return send("DELETE", "/auth/session");
 }
 
-export function getCaredForShoppers(): Promise<CaredForShopper[]> {
-  return request("/care/shoppers");
+// --- Profile and rules -------------------------------------------------------
+
+export function getProfile(): Promise<Profile> {
+  return request("/me");
+}
+
+export function updateProfile(changes: ProfileChanges): Promise<Profile> {
+  return send("PATCH", "/me", changes);
+}
+
+export function getRules(): Promise<SpendingRules> {
+  return request("/rules");
+}
+
+export function saveRules(rules: SpendingRulesInput): Promise<SpendingRules> {
+  return send("PUT", "/rules", rules);
 }
 
 /** Top-level Channel3 categories, or those matching `query`. */
 export function getCategories(query = ""): Promise<Category[]> {
   const search = query ? `?query=${encodeURIComponent(query)}` : "";
-  return request(`/care/categories${search}`);
+  return request(`/rules/categories${search}`);
 }
 
-export function getApprovals(): Promise<WaitingOrder[]> {
-  return request("/care/approvals");
+// --- Chat and checkout -------------------------------------------------------
+
+export function sendChat(message: string): Promise<ChatResponse> {
+  return post("/chat", { message });
 }
 
-export function decideApproval(
-  orderId: number,
-  decision: "approve" | "decline",
-  note: string,
-): Promise<DecisionResult> {
-  return post(`/care/approvals/${orderId}`, { decision, note: note || null });
-}
-
-export function getLedger(shopperId: number): Promise<LedgerRow[]> {
-  return request(`/care/shoppers/${shopperId}/orders`);
-}
-
-export function getOrderDetail(
-  shopperId: number,
-  orderId: number,
-): Promise<OrderDetail> {
-  return request(`/care/shoppers/${shopperId}/orders/${orderId}`);
-}
-
-export function getSpending(shopperId: number): Promise<Spending> {
-  return request(`/care/shoppers/${shopperId}/spending`);
-}
-
-export function askAboutSpending(
-  shopperId: number,
-  question: string,
-): Promise<AskResponse> {
-  return post(`/care/shoppers/${shopperId}/ask`, { question });
-}
-
-export function getLimits(shopperId: number): Promise<Limits> {
-  return request(`/care/shoppers/${shopperId}/limits`);
-}
-
-export function saveLimits(
-  shopperId: number,
-  limits: LimitsInput,
-): Promise<Limits> {
-  return send("PUT", `/care/shoppers/${shopperId}/limits`, limits);
-}
-
-export function sendChat(
-  shopperId: number,
-  message: string,
-): Promise<ChatResponse> {
-  return post("/chat", { shopper_id: shopperId, message });
+/** One tap on Buy: draft an order for the product's best offer. Nothing is paid. */
+export function draftOrder(productId: string): Promise<Order> {
+  return post("/orders/draft", { channel3_product_id: productId });
 }
 
 /**
- * Confirm exactly the order the shopper was shown and read. For a spoken
- * answer, pass the transcript: the server decides whether it was a yes.
+ * Confirm exactly the order the user was shown. For a spoken answer, pass the
+ * transcript: the server decides whether it was a yes. `acknowledged` lists the
+ * spending-rule warnings the user saw and accepted.
  */
-export function getOrderStatus(orderId: number): Promise<OrderStatusResponse> {
-  return request(`/orders/${orderId}`);
-}
-
-export function getNotifications(): Promise<NotificationsResponse> {
-  return request("/notifications");
-}
-
-/** Mark these notifications read, or all of them when `ids` is left out. */
-export function markNotificationsRead(ids?: number[]): Promise<void> {
-  return post("/notifications/read", { ids: ids ?? null });
-}
-
 export function confirmOrder(
   order: Order,
-  spoken?: { transcript: string },
+  options: { transcript?: string; acknowledged?: WarningCode[] } = {},
 ): Promise<ConfirmResponse> {
   const { title, price, currency, total } = order;
   return post(`/orders/${order.id}/confirm`, {
@@ -411,8 +304,9 @@ export function confirmOrder(
     price,
     currency,
     total,
-    method: spoken ? "voice" : "button",
-    transcript: spoken?.transcript ?? null,
+    method: options.transcript ? "voice" : "button",
+    transcript: options.transcript ?? null,
+    acknowledged: options.acknowledged ?? [],
   });
 }
 
@@ -422,17 +316,21 @@ export function createPayPalOrder(
   return post(`/orders/${orderId}/paypal`);
 }
 
+/** After PayPal approval: the server authorizes and captures. */
 export function approveOrder(orderId: number): Promise<Order> {
   return post(`/orders/${orderId}/approved`);
 }
 
-export function getSettings(shopperId: number): Promise<ShopperSettings> {
-  return request(`/shoppers/${shopperId}/settings`);
+// --- Orders and insights -----------------------------------------------------
+
+export function getOrders(): Promise<OrderRow[]> {
+  return request("/orders");
 }
 
-export function updateSettings(
-  shopperId: number,
-  changes: Partial<ShopperSettings>,
-): Promise<ShopperSettings> {
-  return send("PATCH", `/shoppers/${shopperId}/settings`, changes);
+export function getOrderDetail(orderId: number): Promise<OrderDetail> {
+  return request(`/orders/${orderId}`);
+}
+
+export function getSpending(): Promise<Spending> {
+  return request("/insights/spending");
 }

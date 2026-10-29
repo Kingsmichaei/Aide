@@ -20,6 +20,11 @@ if (typeof window.matchMedia !== "function") {
   });
 }
 
+// jsdom does no layout, so it has no scrolling either.
+if (typeof Element.prototype.scrollIntoView !== "function") {
+  Element.prototype.scrollIntoView = () => {};
+}
+
 afterEach(() => {
   cleanup();
 });
