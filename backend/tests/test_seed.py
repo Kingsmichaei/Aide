@@ -4,125 +4,87 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import (
-    AlertKind,
-    Approval,
-    CareLink,
-    Decision,
-    Limit,
-    Notification,
-    Order,
-    OrderEvent,
-    OrderStatus,
-    Role,
-    User,
-)
+from app.models import Order, OrderEvent, OrderStatus, SpendingRule, User
 from app.seed import seed
-from app.services.limits import monthly_spend
+from app.services.rules import monthly_spend
 from app.services.spending import spending
 
-NOW = datetime(2026, 10, 28, 12, 0, tzinfo=UTC)
+NOW = datetime(2026, 10, 29, 12, 0, tzinfo=UTC)
 
 
 def orders_of(session: Session, user: User) -> list[Order]:
-    return list(session.scalars(select(Order).where(Order.shopper_id == user.id)))
+    return list(session.scalars(select(Order).where(Order.user_id == user.id)))
 
 
-def test_seed_creates_shopper_caregiver_link_and_limit(session: Session) -> None:
-    shopper, caregiver = seed(session, NOW)
+def test_two_people_one_with_rules(session: Session) -> None:
+    maya, leo = seed(session, NOW)
 
-    assert shopper.role == Role.shopper
-    assert caregiver.role == Role.caregiver
-    assert session.get(CareLink, (shopper.id, caregiver.id)) is not None
-    limit = session.get(Limit, shopper.id)
-    assert limit is not None
-    assert (limit.per_order_max, limit.monthly_max) == (Decimal("100.00"), Decimal("500.00"))
+    assert (maya.name, maya.email, leo.name) == ("Maya Chen", "maya@example.com", "Leo Martin")
+    rules = session.get(SpendingRule, maya.id)
+    assert rules is not None
+    assert (rules.monthly_budget, rules.ask_above) == (Decimal("600.00"), Decimal("150.00"))
+    assert session.get(SpendingRule, leo.id) is None
+    assert orders_of(session, leo) == []
 
 
 def test_seed_is_idempotent(session: Session) -> None:
     seed(session, NOW)
-    shopper, _ = seed(session, NOW)
+    maya, _ = seed(session, NOW)
 
     assert session.scalar(select(func.count()).select_from(User)) == 2
-    assert len(orders_of(session, shopper)) == 15
+    assert len(orders_of(session, maya)) == 14
 
 
-def test_two_months_of_orders_across_five_categories(session: Session) -> None:
-    shopper, _ = seed(session, NOW)
-    orders = orders_of(session, shopper)
+def test_two_months_of_paid_orders_across_five_categories(session: Session) -> None:
+    maya, _ = seed(session, NOW)
+    orders = orders_of(session, maya)
 
-    assert {o.category for o in orders} == {"Health", "Kitchen", "Home", "Books", "Clothing"}
+    assert {o.category for o in orders} == {
+        "Electronics",
+        "Sports",
+        "Kitchen",
+        "Beauty",
+        "Clothing",
+    }
+    assert all(o.status == OrderStatus.captured for o in orders)
     oldest = min(o.created_at for o in orders).replace(tzinfo=UTC)
-    newest = max(o.created_at for o in orders).replace(tzinfo=UTC)
     assert NOW - timedelta(days=62) <= oldest <= NOW - timedelta(days=50)
-    assert newest < NOW
-    # Both ways of confirming appear, voice ones with what was said.
     assert {o.confirmation_method for o in orders} == {"voice", "button"}
-    assert all(o.confirmation_transcript for o in orders if o.confirmation_method == "voice")
-
-
-def test_one_waiting_one_declined_with_a_note_one_approved(session: Session) -> None:
-    shopper, caregiver = seed(session, NOW)
-    by_status: dict[OrderStatus, list[Order]] = {}
-    for order in orders_of(session, shopper):
-        by_status.setdefault(order.status, []).append(order)
-
-    [waiting] = by_status[OrderStatus.awaiting_caregiver]
-    [declined] = by_status[OrderStatus.voided]
-    assert waiting.title == "Bluetooth TV hearing amplifier"
-    assert waiting.confirmed_total > Decimal("100")  # over the per-order limit
-    decisions = {a.order_id: a for a in session.scalars(select(Approval)).all()}
-    assert decisions[declined.id].decision == Decision.declined
-    assert "Dr. Lee" in (decisions[declined.id].note or "")
-    approved = [d for d in decisions.values() if d.decision == Decision.approved]
-    assert len(approved) == 1
-    assert waiting.id not in decisions
 
 
 def test_every_order_has_its_event_trail(session: Session) -> None:
-    shopper, _ = seed(session, NOW)
+    maya, _ = seed(session, NOW)
 
-    for order in orders_of(session, shopper):
-        events = session.scalars(
-            select(OrderEvent.detail).where(OrderEvent.order_id == order.id).order_by(OrderEvent.id)
+    for order in orders_of(session, maya):
+        statuses = session.scalars(
+            select(OrderEvent.to_status)
+            .where(OrderEvent.order_id == order.id)
+            .order_by(OrderEvent.id)
         ).all()
-        names = [e["event"] for e in events]
-        assert names[:4] == ["drafted", "confirmed", "paypal_order_created", "authorized"]
-        assert names[-1] in {
-            "captured",
-            "sent_to_caregiver",
-            "approved_and_captured",
-            "declined_and_voided",
-        }
+        assert statuses == ["draft", "confirmed", "awaiting_payment", "authorized", "captured"]
 
 
-def test_sam_has_one_unread_alert_for_the_waiting_order(session: Session) -> None:
-    shopper, caregiver = seed(session, NOW)
-    unread = session.scalars(
-        select(Notification).where(
-            Notification.user_id == caregiver.id, Notification.read_at.is_(None)
-        )
-    ).all()
+def test_over_the_ask_first_amount_was_accepted_explicitly(session: Session) -> None:
+    maya, _ = seed(session, NOW)
+    big = [o for o in orders_of(session, maya) if o.confirmed_total and o.confirmed_total > 150]
 
-    assert [(n.kind, n.params["title"]) for n in unread] == [
-        (AlertKind.approval_needed, "Bluetooth TV hearing amplifier")
-    ]
+    assert big
+    for order in big:
+        confirmed = session.scalars(
+            select(OrderEvent).where(
+                OrderEvent.order_id == order.id, OrderEvent.to_status == OrderStatus.confirmed
+            )
+        ).one()
+        assert confirmed.detail["acknowledged"] == ["ask_above"]
+        assert confirmed.note
 
 
-def test_dashboard_figures_make_sense(session: Session) -> None:
-    shopper, _ = seed(session, NOW)
+def test_figures_leave_room_in_the_budget_for_a_live_demo(session: Session) -> None:
+    maya, _ = seed(session, NOW)
 
-    figures = spending(session, shopper.id, NOW)
+    spent = monthly_spend(session, maya.id, "USD", NOW)
+    figures = spending(session, maya, NOW)
 
-    # This month leaves room under the $500 limit for a live demo order.
-    spent = monthly_spend(session, shopper.id, "USD", NOW)
-    assert Decimal("50") < spent < Decimal("300")
-    assert figures.waiting == 1
-    assert {label for label, _ in figures.by_category} == {
-        "Health",
-        "Kitchen",
-        "Home",
-        "Books",
-        "Clothing",
-    }
+    assert Decimal("100") < spent < Decimal("450")
+    assert len(figures.by_category) == 5
     assert sum(1 for _, total in figures.by_month if total > 0) >= 2

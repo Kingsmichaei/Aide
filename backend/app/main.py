@@ -1,8 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import get_settings
-from app.routers import auth, care, care_orders, chat, health, notifications, orders, shoppers
+from app.core import error_handlers
+from app.core import logging as app_logging
+from app.core.config import get_settings
+from app.routers import auth, chat, health, insights, me, notifications, orders, rules
+
+app_logging.configure(get_settings().log_level)
 
 app = FastAPI(title="Aide API")
 
@@ -13,12 +17,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+error_handlers.install(app)
 
-app.include_router(health.router)
-app.include_router(auth.router)
-app.include_router(care.router)
-app.include_router(care_orders.router)
-app.include_router(notifications.router)
-app.include_router(orders.router)
-app.include_router(chat.router)
-app.include_router(shoppers.router)
+for router in (auth, me, chat, orders, rules, insights, notifications, health):
+    app.include_router(router.router)

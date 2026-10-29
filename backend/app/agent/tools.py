@@ -11,9 +11,9 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.agent.llm import ToolSpec
+from app.integrations.channel3 import Channel3Client, Product
+from app.integrations.llm import ToolSpec
 from app.models import Actor, Order
-from app.services.channel3 import Channel3Client, Product
 from app.services.orders import create_draft, total
 
 MAX_OPTIONS = 3  # CLAUDE.md: at most three options at a time
@@ -24,9 +24,9 @@ LANGUAGES = ("en", "es", "fr", "ar")
 class ToolContext:
     session: Session
     channel3: Channel3Client
-    shopper_id: int
+    user_id: int
     blocked_categories: list[str]
-    language: str = "en"  # the shopper's language setting
+    language: str = "en"  # the user's language setting
     products: list[Product] = field(default_factory=list)  # cards to show with the reply
     draft_order: Order | None = None
     reply_language: str | None = None  # set when the reply is in another language
@@ -92,7 +92,7 @@ async def propose_order(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any
     product = await ctx.channel3.get_product(_str(args, "product_id"), ctx.blocked_categories)
     if product is None or product.best_offer is None:
         return {"error": "This product is not available."}
-    order = create_draft(ctx.session, ctx.shopper_id, product, Actor.system)
+    order = create_draft(ctx.session, ctx.user_id, product, Actor.system)
     ctx.draft_order = order
     return {
         "order_id": order.id,
@@ -102,7 +102,7 @@ async def propose_order(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any
         "delivery": "0.00",
         "total": str(total(order)),
         "currency": order.currency,
-        "next_step": "Read the total to the shopper. They confirm with the 'Yes, buy it' button.",
+        "next_step": "Tell the user the full price. They confirm with Buy or a clear yes.",
     }
 
 
@@ -118,7 +118,7 @@ async def reply_in_language(ctx: ToolContext, args: dict[str, Any]) -> dict[str,
     }
 
 
-def _spec(name: str, description: str, properties: dict[str, Any], required: list[str]):
+def _spec(name: str, description: str, properties: dict[str, Any], required: list[str]) -> ToolSpec:
     return ToolSpec(
         name=name,
         description=description,
@@ -138,7 +138,7 @@ TOOLS: dict[str, Tool] = {
                 {
                     "query": {
                         "type": "string",
-                        "description": "What the shopper wants, in English.",
+                        "description": "What the user wants, in English.",
                     },
                     "max_price": {"type": "number", "description": "Highest price, if given."},
                 },
@@ -167,8 +167,8 @@ TOOLS: dict[str, Tool] = {
         Tool(
             _spec(
                 "propose_order",
-                "Draft an order once the shopper has picked a product. This does NOT buy "
-                "anything; the shopper must confirm the total on screen first.",
+                "Draft an order once the user has picked a product. This does NOT buy "
+                "anything; the user must confirm the total on screen first.",
                 {"product_id": PRODUCT_ID},
                 ["product_id"],
             ),
@@ -177,9 +177,9 @@ TOOLS: dict[str, Tool] = {
         Tool(
             _spec(
                 "reply_in_language",
-                "Call this before replying when the shopper clearly writes in a different "
+                "Call this before replying when the user clearly writes in a different "
                 "language from their setting. The app then reads your reply in that language "
-                "and offers the shopper a button to switch. It changes nothing by itself.",
+                "and offers the user a button to switch. It changes nothing by itself.",
                 {"language": {"type": "string", "enum": list(LANGUAGES)}},
                 ["language"],
             ),

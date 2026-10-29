@@ -86,7 +86,8 @@ def _to_gemini(entry: dict[str, Any]) -> list[dict[str, Any]]:
     if entry["role"] == "user":
         return [{"type": "user_input", "content": entry["text"]}]
     if entry["role"] == "model":
-        return entry["raw"]  # thoughts and function calls must be replayed exactly
+        raw: list[dict[str, Any]] = entry["raw"]
+        return raw  # thoughts and function calls must be replayed exactly
     return [
         {
             "type": "function_result",

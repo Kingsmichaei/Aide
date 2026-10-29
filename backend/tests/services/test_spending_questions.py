@@ -8,12 +8,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.agent.llm import History, LLMError, LLMTurn, ToolCall, ToolSpec
-from app.db import get_session
-from app.deps import get_llm
+from app.core.db import get_session
+from app.core.deps import get_llm
+from app.integrations.llm import History, LLMError, LLMTurn, ToolCall, ToolSpec
 from app.main import app
-from app.models import CareLink, CareLinkStatus, Limit, Order, OrderStatus, Role, User
-from app.services.spending_questions import REFUSAL, answer_question
+from app.models import Order, OrderStatus, User
+from app.services.spending_questions import REFUSAL, Answer, answer_question
 
 pytestmark = pytest.mark.anyio
 
@@ -53,29 +53,9 @@ def say(text: str) -> LLMTurn:
 
 @pytest.fixture
 def people(session: Session) -> dict[str, User]:
-    people = {
-        "rosa": User(name="Rosa", role=Role.shopper),
-        "ana": User(name="Ana", role=Role.shopper),
-        "sam": User(name="Sam", role=Role.caregiver),
-    }
+    people = {"rosa": User(name="Rosa", currency="USD"), "ana": User(name="Ana")}
     session.add_all(people.values())
     session.flush()
-    session.add(
-        CareLink(
-            shopper_id=people["rosa"].id,
-            caregiver_id=people["sam"].id,
-            status=CareLinkStatus.active,
-        )
-    )
-    session.add(
-        Limit(
-            shopper_id=people["rosa"].id,
-            per_order_max=Decimal("100"),
-            monthly_max=Decimal("500"),
-            currency="USD",
-            blocked_categories=[],
-        )
-    )
     rosa = people["rosa"]
     for title, category, retailer, total, paid_on, status in [
         ("Vitamin D", "Health", "cvs.com", "60.00", "2026-10-05", OrderStatus.captured),
@@ -88,7 +68,7 @@ def people(session: Session) -> dict[str, User]:
         when = datetime.fromisoformat(f"{paid_on}T12:00:00+00:00")
         session.add(
             Order(
-                shopper_id=rosa.id,
+                user_id=rosa.id,
                 channel3_product_id=title,
                 title=title,
                 retailer=retailer,
@@ -103,7 +83,7 @@ def people(session: Session) -> dict[str, User]:
         )
     session.add(  # someone else's order never counts
         Order(
-            shopper_id=people["ana"].id,
+            user_id=people["ana"].id,
             channel3_product_id="x",
             title="Vitamin E",
             retailer="cvs.com",
@@ -119,8 +99,8 @@ def people(session: Session) -> dict[str, User]:
     return people
 
 
-async def ask(session: Session, people: dict[str, User], llm: ScriptedLLM, question: str):
-    return await answer_question(llm, session, people["rosa"].id, "Rosa", question, TODAY)
+async def ask(session: Session, people: dict[str, User], llm: ScriptedLLM, question: str) -> Answer:
+    return await answer_question(llm, session, people["rosa"], question, TODAY)
 
 
 # --- Three example questions ------------------------------------------------------
@@ -290,7 +270,7 @@ async def test_filters_with_sql_characters_are_just_text(
     assert order_count(session) == 7
 
 
-async def test_only_this_shoppers_orders_count(session: Session, people: dict[str, User]) -> None:
+async def test_only_this_users_orders_count(session: Session, people: dict[str, User]) -> None:
     llm = ScriptedLLM(
         [query(date_from="2026-10-01", date_to="2026-10-28", retailer="cvs"), say("…")]
     )
@@ -313,7 +293,7 @@ async def test_plain_sentence_if_the_model_gives_none(
     result = await ask(session, people, llm, "Kitchen spending this month?")
 
     assert result.answered is True
-    assert result.answer == "Rosa spent 40.00 USD on 1 order from 2026-10-01 to 2026-10-28."
+    assert result.answer == "You spent 40.00 USD on 1 order from 2026-10-01 to 2026-10-28."
 
 
 async def test_model_down(session: Session, people: dict[str, User]) -> None:
@@ -346,37 +326,39 @@ def test_ask_endpoint(client: TestClient, people: dict[str, User]) -> None:
     llm = ScriptedLLM(
         [
             query(date_from="2026-08-01", date_to="2026-10-28", group_by="category"),
-            say("Health is Rosa's biggest category."),
+            say("Health is your biggest category."),
         ]
     )
     app.dependency_overrides[get_llm] = lambda: llm
-    sign_in(client, people["sam"])
+    sign_in(client, people["rosa"])
 
-    body = client.post(
-        f"/care/shoppers/{people['rosa'].id}/ask", json={"question": "Spend by category?"}
-    ).json()
+    body = client.post("/insights/ask", json={"question": "Spend by category?"}).json()
 
     assert body["answered"] is True
-    assert body["answer"] == "Health is Rosa's biggest category."
+    assert body["answer"] == "Health is your biggest category."
     assert body["chart"] == "donut"
     assert body["rows"][0] == {"label": "Health", "total": "115.50", "count": 3}
     assert body["query"]["group_by"] == "category"
 
 
-def test_ask_needs_the_linked_caregiver(client: TestClient, people: dict[str, User]) -> None:
-    app.dependency_overrides[get_llm] = lambda: ScriptedLLM([])
-    for who in ("ana", "rosa"):
-        sign_in(client, people[who])
-        response = client.post(
-            f"/care/shoppers/{people['rosa'].id}/ask", json={"question": "Total?"}
-        )
-        assert response.status_code == 403
+def test_each_person_asks_about_their_own_orders(
+    client: TestClient, people: dict[str, User]
+) -> None:
+    llm = ScriptedLLM(
+        [query(date_from="2026-01-01", date_to="2026-10-28"), say("You spent nothing.")]
+    )
+    app.dependency_overrides[get_llm] = lambda: llm
+    sign_in(client, people["ana"])
+
+    body = client.post("/insights/ask", json={"question": "Total?"}).json()
+
+    assert body["rows"] == [{"label": "Total", "total": "999.00", "count": 1}]
 
 
 def test_question_length_is_limited(client: TestClient, people: dict[str, User]) -> None:
     app.dependency_overrides[get_llm] = lambda: ScriptedLLM([])
-    sign_in(client, people["sam"])
+    sign_in(client, people["rosa"])
 
-    response = client.post(f"/care/shoppers/{people['rosa'].id}/ask", json={"question": "x" * 301})
+    response = client.post("/insights/ask", json={"question": "x" * 301})
 
     assert response.status_code == 422

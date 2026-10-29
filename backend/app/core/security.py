@@ -1,8 +1,8 @@
 """Demo sign-in: a signed, HTTP-only session cookie holding the user id.
 
 There are no passwords; anyone can pick a seeded user. The cookie is signed so
-it cannot be edited to become someone else, and access rules are enforced here:
-shoppers only see their own data, caregivers only see shoppers linked to them.
+it cannot be edited to become someone else. Every route acts for the signed-in
+user only: nothing takes a user id from the request.
 """
 
 import hashlib
@@ -11,12 +11,11 @@ import time
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, Response, status
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
-from app.db import get_session
-from app.models import CareLink, CareLinkStatus, Role, User
+from app.core.config import get_settings
+from app.core.db import get_session
+from app.models import User
 
 COOKIE = "aide_session"
 MAX_AGE = 7 * 24 * 60 * 60  # a week, so a demo survives a few days of testing
@@ -81,52 +80,3 @@ def current_user(request: Request, session: SessionDep) -> User:
 
 
 CurrentUser = Annotated[User, Depends(current_user)]
-
-
-def require_shopper(user: CurrentUser) -> User:
-    if user.role != Role.shopper:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only shoppers can do this")
-    return user
-
-
-def check_is_shopper(user: User, shopper_id: int) -> None:
-    """Shoppers may only act for themselves."""
-    if user.role != Role.shopper or user.id != shopper_id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "You can only see your own account")
-
-
-def require_caregiver(user: CurrentUser) -> User:
-    if user.role != Role.caregiver:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only caregivers can do this")
-    return user
-
-
-Caregiver = Annotated[User, Depends(require_caregiver)]
-
-
-def linked_shopper_ids(session: Session, caregiver: User) -> set[int]:
-    """Shoppers this caregiver has an active care link to."""
-    return set(
-        session.scalars(
-            select(CareLink.shopper_id).where(
-                CareLink.caregiver_id == caregiver.id,
-                CareLink.status == CareLinkStatus.active,
-            )
-        )
-    )
-
-
-def check_looks_after(session: Session, caregiver: User, shopper_id: int) -> None:
-    if shopper_id not in linked_shopper_ids(session, caregiver):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "You do not look after this shopper")
-
-
-def cared_for_shopper(shopper_id: int, caregiver: Caregiver, session: SessionDep) -> User:
-    """The shopper in the path, if this caregiver has an active link to them."""
-    check_looks_after(session, caregiver, shopper_id)
-    shopper = session.get(User, shopper_id)
-    assert shopper is not None  # the link's foreign key guarantees it
-    return shopper
-
-
-CaredForShopper = Annotated[User, Depends(cared_for_shopper)]

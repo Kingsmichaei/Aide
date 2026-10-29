@@ -11,7 +11,7 @@ from app.services.orders import total
 
 class OrderOut(BaseModel):
     id: int
-    shopper_id: int
+    user_id: int
     status: OrderStatus
     channel3_product_id: str
     title: str

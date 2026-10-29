@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 import app.models  # noqa: F401  (registers every table on Base.metadata)
-from app.db import Base, make_engine
+from app.core.db import Base, make_engine
 
 
 @pytest.fixture

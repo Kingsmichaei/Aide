@@ -1,11 +1,11 @@
-"""One shopper turn: send history to the model, run any tool calls, repeat until it replies."""
+"""One user turn: send history to the model, run any tool calls, repeat until it replies."""
 
 import logging
 from typing import Any
 
-from app.agent.llm import History, LLMClient
 from app.agent.tools import TOOLS, ToolContext, ToolInputError
-from app.services.channel3 import Channel3Error
+from app.integrations.channel3 import Channel3Error
+from app.integrations.llm import History, LLMClient
 
 logger = logging.getLogger(__name__)
 

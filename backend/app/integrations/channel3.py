@@ -127,7 +127,7 @@ def _category(raw: dict[str, Any]) -> Category:
 
 
 def _fetch_limit(limit: int, blocked_categories: Collection[str]) -> int:
-    # Ask for extra when we may drop some, so the shopper still gets `limit` results.
+    # Ask for extra when we may drop some, so the user still gets `limit` results.
     return min(limit * 2 if blocked_categories else limit, MAX_LIMIT)
 
 

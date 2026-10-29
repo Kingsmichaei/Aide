@@ -14,8 +14,6 @@ from typing import Any
 import httpx
 from pydantic import BaseModel
 
-from app.models import Order
-
 SANDBOX_URL = "https://api-m.sandbox.paypal.com"
 TOKEN_REFRESH_MARGIN = 60  # seconds before expiry to fetch a new token
 ZERO_DECIMAL_CURRENCIES = {"HUF", "JPY", "TWD"}
@@ -31,6 +29,16 @@ class PayPalError(Exception):
         self.status = status
         # PayPal's machine-readable reason, e.g. AUTHORIZATION_EXPIRED
         self.issue = issue
+
+
+class Purchase(BaseModel):
+    """One item at the total the user confirmed (delivery is total minus price)."""
+
+    reference: str  # our order id; also makes retries idempotent
+    title: str
+    price: Decimal
+    total: Decimal
+    currency: str
 
 
 class PayPalOrder(BaseModel):
@@ -65,34 +73,32 @@ class PayPalClient:
         self._token_expires_at = 0.0
         self._token_lock = asyncio.Lock()
 
-    async def create_order(self, order: Order) -> PayPalOrder:
-        """Create a PayPal order for the total the shopper confirmed."""
-        if order.confirmed_total is None:
-            raise PayPalError(f"Order {order.id} has no shopper confirmation")
-        currency = order.currency
-        breakdown = {"item_total": _money(order.price, currency)}
-        delivery = order.confirmed_total - order.price
+    async def create_order(self, purchase: Purchase) -> PayPalOrder:
+        """Create a PayPal order (intent AUTHORIZE) for the purchase."""
+        currency = purchase.currency
+        breakdown = {"item_total": _money(purchase.price, currency)}
+        delivery = purchase.total - purchase.price
         if delivery:
             breakdown["shipping"] = _money(delivery, currency)
         body = {
             "intent": "AUTHORIZE",
             "purchase_units": [
                 {
-                    "reference_id": str(order.id),
-                    "custom_id": str(order.id),
-                    "amount": {**_money(order.confirmed_total, currency), "breakdown": breakdown},
+                    "reference_id": purchase.reference,
+                    "custom_id": purchase.reference,
+                    "amount": {**_money(purchase.total, currency), "breakdown": breakdown},
                     "items": [
                         {
-                            "name": order.title[:127],
+                            "name": purchase.title[:127],
                             "quantity": "1",
-                            "unit_amount": _money(order.price, currency),
+                            "unit_amount": _money(purchase.price, currency),
                             "category": "PHYSICAL_GOODS",
                         }
                     ],
                 }
             ],
         }
-        request_id = f"aide-create-{order.id}-{order.confirmed_total}-{currency}"
+        request_id = f"aide-create-{purchase.reference}-{purchase.total}-{currency}"
         data = await self._post("/v2/checkout/orders", body, request_id)
         return PayPalOrder(id=data["id"], status=data["status"])
 

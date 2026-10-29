@@ -4,12 +4,12 @@ from decimal import Decimal
 import httpx
 import pytest
 
-from app.models import Order
-from app.services.paypal import (
+from app.integrations.paypal import (
     AUTHORIZATION_EXPIRED,
     SANDBOX_URL,
     PayPalClient,
     PayPalError,
+    Purchase,
 )
 
 pytestmark = pytest.mark.anyio
@@ -89,18 +89,15 @@ def paypal(fake: FakePayPal, clock: FakeClock) -> PayPalClient:
     return PayPalClient("client-id", "secret", http=http, clock=clock)
 
 
-def make_order(**overrides: object) -> Order:
+def make_purchase(**overrides: object) -> Purchase:
     fields: dict[str, object] = {
-        "id": 7,
-        "shopper_id": 1,
-        "channel3_product_id": "c3-1",
+        "reference": "7",
         "title": "Electric kettle",
-        "retailer": "target.com",
         "price": Decimal("39.99"),
+        "total": Decimal("42.50"),
         "currency": "USD",
-        "confirmed_total": Decimal("42.50"),
     }
-    return Order(**(fields | overrides))
+    return Purchase.model_validate(fields | overrides)
 
 
 async def test_token_is_fetched_once_and_cached_until_expiry(
@@ -123,7 +120,7 @@ async def test_token_is_fetched_once_and_cached_until_expiry(
 async def test_create_order_uses_authorize_intent_and_stored_amounts(
     paypal: PayPalClient, fake: FakePayPal
 ) -> None:
-    result = await paypal.create_order(make_order())
+    result = await paypal.create_order(make_purchase())
 
     assert result.id == "PP-ORDER-1"
     [request] = fake.api_requests()
@@ -154,7 +151,7 @@ async def test_create_order_uses_authorize_intent_and_stored_amounts(
 async def test_create_order_omits_shipping_when_total_equals_price(
     paypal: PayPalClient, fake: FakePayPal
 ) -> None:
-    await paypal.create_order(make_order(confirmed_total=Decimal("39.99")))
+    await paypal.create_order(make_purchase(total=Decimal("39.99")))
 
     amount = json.loads(fake.api_requests()[0].content)["purchase_units"][0]["amount"]
     assert "shipping" not in amount["breakdown"]
@@ -164,19 +161,11 @@ async def test_create_order_formats_zero_decimal_currencies(
     paypal: PayPalClient, fake: FakePayPal
 ) -> None:
     await paypal.create_order(
-        make_order(price=Decimal("4500"), confirmed_total=Decimal("4500"), currency="JPY")
+        make_purchase(price=Decimal("4500"), total=Decimal("4500"), currency="JPY")
     )
 
     amount = json.loads(fake.api_requests()[0].content)["purchase_units"][0]["amount"]
     assert amount["value"] == "4500"
-
-
-async def test_create_order_refuses_unconfirmed_order(
-    paypal: PayPalClient, fake: FakePayPal
-) -> None:
-    with pytest.raises(PayPalError, match="no shopper confirmation"):
-        await paypal.create_order(make_order(confirmed_total=None))
-    assert fake.requests == []
 
 
 async def test_authorize_returns_authorization(paypal: PayPalClient, fake: FakePayPal) -> None:

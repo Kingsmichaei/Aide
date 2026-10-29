@@ -1,11 +1,12 @@
 import json
+from collections.abc import Callable
 from decimal import Decimal
 from typing import Any
 
 import httpx
 import pytest
 
-from app.services.channel3 import BASE_URL, Channel3Client, Channel3Error
+from app.integrations.channel3 import BASE_URL, Channel3Client, Channel3Error
 
 pytestmark = pytest.mark.anyio
 
@@ -21,7 +22,9 @@ def offer(
     }
 
 
-def product(pid: str, category: str = "kettles", parent: str = "kitchen", **extra: Any):
+def product(
+    pid: str, category: str = "kettles", parent: str = "kitchen", **extra: Any
+) -> dict[str, Any]:
     return {
         "id": pid,
         "title": f"Product {pid}",
@@ -51,7 +54,9 @@ def product(pid: str, category: str = "kettles", parent: str = "kitchen", **extr
     }
 
 
-def client_for(handler) -> tuple[Channel3Client, list[httpx.Request]]:
+def client_for(
+    handler: Callable[[httpx.Request], httpx.Response],
+) -> tuple[Channel3Client, list[httpx.Request]]:
     seen: list[httpx.Request] = []
 
     def record(request: httpx.Request) -> httpx.Response:

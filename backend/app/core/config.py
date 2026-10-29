@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=(".env", "../.env"), extra="ignore")
 
     # SQLite file in backend/ for local development; Render sets a Postgres URL.
-    database_url: str = "sqlite:///aide.db"
+    database_url: str = "sqlite:///./aide.db"
     llm_provider: str = ""
     llm_api_key: str = ""
     llm_model: str = "gemini-3.8-flash"
@@ -22,7 +22,10 @@ class Settings(BaseSettings):
     channel3_api_key: str = ""
     kernel_api_key: str = ""
     render_api_key: str = ""
+    ag_grid_license_key: str = ""
+    bryntum_license: str = ""
     frontend_url: str = "http://localhost:5173"
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     # Signs the session cookie. Set it in production; the random default means
     # everyone is signed out whenever the server restarts.
     secret_key: str = Field(default_factory=lambda: secrets.token_urlsafe(32))

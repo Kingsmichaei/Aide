@@ -2,10 +2,10 @@
 
 from functools import lru_cache
 
-from app.agent.llm import LLMClient, make_llm
-from app.config import get_settings
-from app.services.channel3 import Channel3Client
-from app.services.paypal import PayPalClient
+from app.core.config import get_settings
+from app.integrations.channel3 import Channel3Client
+from app.integrations.llm import LLMClient, make_llm
+from app.integrations.paypal import PayPalClient
 
 
 @lru_cache
