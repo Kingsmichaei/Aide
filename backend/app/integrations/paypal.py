@@ -14,6 +14,8 @@ from typing import Any
 import httpx
 from pydantic import BaseModel
 
+from app.integrations.http import make_client
+
 SANDBOX_URL = "https://api-m.sandbox.paypal.com"
 TOKEN_REFRESH_MARGIN = 60  # seconds before expiry to fetch a new token
 ZERO_DECIMAL_CURRENCIES = {"HUF", "JPY", "TWD"}
@@ -67,7 +69,7 @@ class PayPalClient:
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._auth = (client_id, client_secret)
-        self._http = http or httpx.AsyncClient(base_url=SANDBOX_URL, timeout=30)
+        self._http = http or make_client(base_url=SANDBOX_URL, timeout=30)
         self._clock = clock
         self._token: str | None = None
         self._token_expires_at = 0.0
@@ -136,7 +138,12 @@ class PayPalClient:
             "PayPal-Request-Id": request_id,
             "Prefer": "return=representation",
         }
-        response = await self._http.post(path, json=body, headers=headers)
+        try:
+            response = await self._http.post(path, json=body, headers=headers)
+        except httpx.HTTPError as error:
+            # No answer at all: the call may or may not have happened. Retrying
+            # is safe because every POST carries a PayPal-Request-Id.
+            raise PayPalError(f"PayPal POST {path} failed: {error!r}") from error
         if response.is_error:
             issue = _issue(response)
             raise PayPalError(
@@ -150,11 +157,14 @@ class PayPalClient:
     async def _access_token(self) -> str:
         async with self._token_lock:
             if self._token is None or self._clock() >= self._token_expires_at:
-                response = await self._http.post(
-                    "/v1/oauth2/token",
-                    data={"grant_type": "client_credentials"},
-                    auth=self._auth,
-                )
+                try:
+                    response = await self._http.post(
+                        "/v1/oauth2/token",
+                        data={"grant_type": "client_credentials"},
+                        auth=self._auth,
+                    )
+                except httpx.HTTPError as error:
+                    raise PayPalError(f"PayPal token request failed: {error!r}") from error
                 if response.is_error:
                     raise PayPalError(f"PayPal token request failed: HTTP {response.status_code}")
                 data = response.json()

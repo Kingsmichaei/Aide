@@ -197,6 +197,20 @@ async def test_errors_raise_paypal_error(paypal: PayPalClient) -> None:
     assert (raised.value.status, raised.value.issue) == (404, None)
 
 
+@pytest.mark.parametrize("path", ["/v1/oauth2/token", "/v2/payments/authorizations/AUTH-1/capture"])
+async def test_no_connection_raises_paypal_error(fake: FakePayPal, path: str) -> None:
+    def offline(request: httpx.Request) -> httpx.Response:
+        if request.url.path == path:
+            raise httpx.ReadTimeout("timed out", request=request)
+        return fake(request)
+
+    http = httpx.AsyncClient(base_url=SANDBOX_URL, transport=httpx.MockTransport(offline))
+    client = PayPalClient("id", "secret", http=http)
+
+    with pytest.raises(PayPalError, match="ReadTimeout"):
+        await client.capture("AUTH-1")
+
+
 async def test_expired_authorization_is_reported_by_issue(paypal: PayPalClient) -> None:
     with pytest.raises(PayPalError) as raised:
         await paypal.capture("AUTH-OLD")

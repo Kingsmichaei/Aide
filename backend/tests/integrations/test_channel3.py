@@ -178,6 +178,16 @@ async def test_errors_raise_channel3_error() -> None:
         await client.search_products("kettle")
 
 
+async def test_no_connection_raises_channel3_error() -> None:
+    def offline(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("getaddrinfo failed", request=request)
+
+    client, _ = client_for(offline)
+
+    with pytest.raises(Channel3Error, match="ConnectError"):
+        await client.search_products("kettle")
+
+
 def category(slug: str, title: str, *parents: tuple[str, str]) -> dict[str, Any]:
     path = [{"slug": s, "title": t} for s, t in parents] + [{"slug": slug, "title": title}]
     return {"slug": slug, "title": title, "path": path, "has_children": False}

@@ -274,4 +274,45 @@ describe("ShopPage", () => {
     expect(draftOrder).toHaveBeenCalledWith("p1", expect.anything());
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
+
+  it("starts a new conversation from a fresh screen, and on New chat", async () => {
+    vi.mocked(sendChat).mockResolvedValue(reply({ products: [] }));
+    renderWithApp(<ShopPage />);
+    const fresh = () =>
+      vi.mocked(sendChat).mock.calls.map((call) => call[1]?.newConversation);
+
+    fireEvent.click(screen.getByRole("button", { name: firstPrompt }));
+    await replied();
+    const box = screen.getByRole("textbox", { name: t.shop.composerLabel });
+    fireEvent.change(box, { target: { value: "cheaper ones" } });
+    fireEvent.click(screen.getByRole("button", { name: t.shop.send }));
+    await waitFor(() => expect(sendChat).toHaveBeenCalledTimes(2));
+    expect(fresh()).toEqual([true, false]);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: t.shop.newChat }),
+    );
+    expect(
+      screen.getByRole("heading", { name: t.shop.greeting("Maya") }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: secondPrompt }));
+    await waitFor(() => expect(sendChat).toHaveBeenCalledTimes(3));
+    expect(fresh()).toEqual([true, false, true]);
+  });
+
+  it("retries a failed first message as a fresh conversation", async () => {
+    vi.mocked(sendChat)
+      .mockRejectedValueOnce(new Error("down"))
+      .mockResolvedValueOnce(reply({ products: [] }));
+    renderWithApp(<ShopPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: firstPrompt }));
+    const alert = await screen.findByRole("alert");
+    fireEvent.click(within(alert).getByRole("button", { name: t.shop.retry }));
+
+    await replied();
+    expect(
+      vi.mocked(sendChat).mock.calls.map((call) => call[1]?.newConversation),
+    ).toEqual([true, true]);
+  });
 });

@@ -24,12 +24,14 @@ def latest(session: Session, user_id: int) -> Conversation | None:
     )
 
 
-def latest_or_new(session: Session, user: User) -> Conversation:
-    conversation = latest(session, user.id)
-    if conversation is None:
-        conversation = Conversation(user_id=user.id, language=user.language, messages=[])
-        session.add(conversation)
+def start(session: Session, user: User) -> Conversation:
+    conversation = Conversation(user_id=user.id, language=user.language, messages=[])
+    session.add(conversation)
     return conversation
+
+
+def latest_or_new(session: Session, user: User) -> Conversation:
+    return latest(session, user.id) or start(session, user)
 
 
 def transcript(session: Session, user_id: int, limit: int) -> list[Message]:

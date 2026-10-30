@@ -13,7 +13,8 @@ export default defineConfig({
     // Same origin as the app, like the /api rewrite on Render (render.yaml).
     proxy: {
       "/api": {
-        target: "http://localhost:8000",
+        // Set API_PROXY_TARGET to run a second API on another port.
+        target: process.env.API_PROXY_TARGET ?? "http://localhost:8000",
         rewrite: (path) => path.replace(/^\/api/, ""),
       },
     },

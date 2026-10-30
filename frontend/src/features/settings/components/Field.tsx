@@ -31,7 +31,7 @@ export function Field({
     [help && !error && helpId, error && errorId].filter(Boolean).join(" ") ||
     undefined;
   return (
-    <div className="grid gap-2">
+    <div className="grid content-start gap-2">
       <Label htmlFor={id}>{label}</Label>
       {children({
         id,

@@ -64,6 +64,25 @@ describe("routes", () => {
     expect(router.state.location.pathname).toBe("/signin");
   });
 
+  it("says when the accounts can't load, and tries again", async () => {
+    vi.mocked(getUsers)
+      .mockRejectedValueOnce(new Error("down"))
+      .mockResolvedValueOnce([maya]);
+    open("/signin");
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(t.signIn.loadFailed);
+    fireEvent.click(
+      within(alert).getByRole("button", { name: t.signIn.retry }),
+    );
+
+    expect(
+      await screen.findByRole("button", {
+        name: t.signIn.signInAs("Maya Chen"),
+      }),
+    ).toBeInTheDocument();
+  });
+
   it("opens on Shop, the chat", async () => {
     const router = open("/");
     expect(

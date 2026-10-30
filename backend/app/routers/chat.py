@@ -21,7 +21,9 @@ async def chat(
     llm: Annotated[LLMClient, Depends(get_llm)],
     user: CurrentUser,
 ) -> ChatOut:
-    reply = await chat_service.reply(session, channel3, llm, user, body.message)
+    reply = await chat_service.reply(
+        session, channel3, llm, user, body.message, new_conversation=body.new_conversation
+    )
     return ChatOut(
         conversation_id=reply.conversation_id,
         reply=reply.text,

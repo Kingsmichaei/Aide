@@ -27,6 +27,7 @@ export function ProductCard({
 }: Props) {
   const { t, money } = useI18n();
   const titleId = useId();
+  const soonId = useId();
   const [imageFailed, setImageFailed] = useState(false);
   const offer = product.best_offer;
   if (!offer) return null;
@@ -43,7 +44,7 @@ export function ProductCard({
       aria-labelledby={titleId}
       className="group flex h-full flex-col overflow-hidden rounded-xl border bg-card shadow-xs transition hover:shadow-md"
     >
-      <div className="relative aspect-[4/3] bg-white">
+      <div className="relative aspect-[4/3] shrink-0 bg-white">
         {product.image_url && !imageFailed ? (
           <img
             src={product.image_url}
@@ -72,7 +73,7 @@ export function ProductCard({
             {offer.retailer}
           </p>
         </div>
-        <div className="mt-auto space-y-3">
+        <div className="space-y-1.5">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
             <p className="price text-lg font-semibold">
               {money(offer.price, offer.currency)}
@@ -89,12 +90,15 @@ export function ProductCard({
               {why}
             </p>
           )}
-          <div className="grid grid-cols-2 gap-2">
+        </div>
+        <div className="mt-auto pt-1">
+          <div className="flex gap-2">
             <Button
               type="button"
               onClick={() => onBuy(product)}
               disabled={disabled}
               aria-label={t.card.buyLabel(product.title)}
+              className="flex-1"
             >
               {t.card.buy}
             </Button>
@@ -105,15 +109,23 @@ export function ProductCard({
                 <Button
                   type="button"
                   variant="outline"
+                  size="icon"
                   aria-disabled="true"
+                  aria-label={t.card.watch}
+                  aria-describedby={soonId}
                   onClick={(event) => event.preventDefault()}
-                  className="cursor-not-allowed px-2 text-muted-foreground opacity-70 hover:bg-transparent"
+                  className="cursor-not-allowed text-muted-foreground hover:bg-transparent hover:text-muted-foreground"
                 >
                   <BellRing aria-hidden="true" />
-                  {t.card.watch}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>{t.card.comingSoon}</TooltipContent>
+              <TooltipContent>
+                {t.card.watch}
+                <span id={soonId} className="text-background/70">
+                  {" "}
+                  · {t.card.comingSoon}
+                </span>
+              </TooltipContent>
             </Tooltip>
           </div>
         </div>

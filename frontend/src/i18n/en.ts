@@ -22,6 +22,8 @@ export const en = {
     demoNote: "This is a demo, so there are no passwords.",
     signInAs: (name: string) => `Continue as ${name}`,
     failed: "We couldn't sign you in. Please try again.",
+    loadFailed: "We couldn't load the demo accounts.",
+    retry: "Try again",
     noUsers: "No accounts yet. Run the seed script first.",
   },
   shop: {

@@ -13,8 +13,13 @@ interface Props {
   messages: ChatMessage[];
   busy: boolean;
   onBuy: (product: Product) => void;
-  /** Present when the browser can speak: adds Play and Stop to Aide's messages. */
-  voice?: { onPlay: (message: ChatMessage) => void; onStop: () => void };
+  /** Present when the browser can speak: adds Listen (or Stop) to Aide's messages. */
+  voice?: {
+    /** The message being read aloud, if any. */
+    playing: number | null;
+    onPlay: (message: ChatMessage) => void;
+    onStop: () => void;
+  };
 }
 
 export function MessageList({ messages, busy, onBuy, voice }: Props) {
@@ -51,30 +56,30 @@ export function MessageList({ messages, busy, onBuy, voice }: Props) {
                 onBuy={onBuy}
                 busy={busy}
               />
-              {voice && (
-                <div className="flex gap-1 text-muted-foreground">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => voice.onPlay(message)}
-                    className="h-7 gap-1.5 px-2 text-xs"
-                  >
-                    <Play aria-hidden="true" className="size-3.5" />
-                    {t.shop.play}
-                  </Button>
+              {voice &&
+                (voice.playing === message.id ? (
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
                     onClick={voice.onStop}
-                    className="h-7 gap-1.5 px-2 text-xs"
+                    className="-ms-2 h-7 gap-1.5 px-2 text-xs text-muted-foreground"
                   >
                     <Square aria-hidden="true" className="size-3.5" />
                     {t.shop.stop}
                   </Button>
-                </div>
-              )}
+                ) : (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => voice.onPlay(message)}
+                    className="-ms-2 h-7 gap-1.5 px-2 text-xs text-muted-foreground"
+                  >
+                    <Play aria-hidden="true" className="size-3.5" />
+                    {t.shop.play}
+                  </Button>
+                ))}
             </div>
           </li>
         ),

@@ -21,6 +21,8 @@ export const fr: Messages = {
     demoNote: "C'est une démonstration : il n'y a pas de mot de passe.",
     signInAs: (name) => `Continuer en tant que ${name}`,
     failed: "Connexion impossible. Réessayez.",
+    loadFailed: "Impossible de charger les comptes de démonstration.",
+    retry: "Réessayer",
     noUsers:
       "Aucun compte pour l'instant. Lancez d'abord le script de données.",
   },

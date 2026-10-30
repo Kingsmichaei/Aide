@@ -231,6 +231,20 @@ def test_follow_up_turn_continues_the_conversation(
     assert [m.get("text") for m in llm.seen[1]] == ["Hola", "Hola Rosa.", "Gracias"]
 
 
+def test_a_fresh_chat_screen_starts_a_new_conversation(
+    session: Session, channel3: FakeChannel3, user_id: int
+) -> None:
+    llm = ScriptedLLM([say("Hola Rosa."), say("Hola otra vez.")])
+    client = make_client(session, channel3, llm)
+
+    first = client.post("/chat", json={"message": "Hola"}).json()
+    second = client.post("/chat", json={"message": "Hola", "new_conversation": True}).json()
+
+    assert first["conversation_id"] != second["conversation_id"]
+    # Aide never sees, or mentions, a chat the user can no longer see.
+    assert [m.get("text") for m in llm.seen[1]] == ["Hola"]
+
+
 def test_unknown_tool_is_reported_back_as_error(
     session: Session, channel3: FakeChannel3, user_id: int
 ) -> None:
@@ -328,4 +342,14 @@ async def test_gemini_adapter_raises_on_http_error() -> None:
     http = httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(429)))
 
     with pytest.raises(LLMError, match="HTTP 429"):
+        await GeminiClient("key", "m", http=http).generate("s", [], [])
+
+
+async def test_gemini_adapter_raises_when_offline() -> None:
+    def offline(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("getaddrinfo failed", request=request)
+
+    http = httpx.AsyncClient(transport=httpx.MockTransport(offline))
+
+    with pytest.raises(LLMError, match="ConnectError"):
         await GeminiClient("key", "m", http=http).generate("s", [], [])

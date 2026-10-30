@@ -280,8 +280,12 @@ export function getCategories(query = ""): Promise<Category[]> {
 
 // --- Chat and checkout -------------------------------------------------------
 
-export function sendChat(message: string): Promise<ChatResponse> {
-  return post("/chat", { message });
+/** `newConversation`: the first message on a fresh chat screen. */
+export function sendChat(
+  message: string,
+  { newConversation = false }: { newConversation?: boolean } = {},
+): Promise<ChatResponse> {
+  return post("/chat", { message, new_conversation: newConversation });
 }
 
 /** One tap on Buy: draft an order for the product's best offer. Nothing is paid. */

@@ -1,5 +1,6 @@
 """One chat turn: the user's message in, Aide's reply (and any products or draft) out."""
 
+import logging
 from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
@@ -14,6 +15,8 @@ from app.models import Order, User
 from app.services import conversations
 from app.services.rules import blocked_categories
 
+log = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class Reply:
@@ -25,9 +28,19 @@ class Reply:
 
 
 async def reply(
-    session: Session, channel3: Channel3Client, llm: LLMClient, user: User, message: str
+    session: Session,
+    channel3: Channel3Client,
+    llm: LLMClient,
+    user: User,
+    message: str,
+    *,
+    new_conversation: bool = False,
 ) -> Reply:
-    conversation = conversations.latest_or_new(session, user)
+    conversation = (
+        conversations.start(session, user)
+        if new_conversation
+        else conversations.latest_or_new(session, user)
+    )
     history = list(conversation.messages)
     ctx = ToolContext(
         session=session,
@@ -39,6 +52,7 @@ async def reply(
     try:
         text = await run_turn(llm, system_prompt(user.name, user.language), history, message, ctx)
     except LLMError as error:
+        log.warning("Chat turn failed for user %s: %s", user.id, error)
         session.rollback()
         raise Unavailable("Aide can't answer right now") from error
 

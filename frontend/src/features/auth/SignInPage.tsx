@@ -3,6 +3,7 @@ import { ChevronRight } from "lucide-react";
 import { useNavigate } from "react-router";
 
 import { BrandMark } from "@/components/BrandMark";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -94,7 +95,24 @@ export function SignInPage() {
                 ))}
               </ul>
             )}
-            {(users.isError || enter.isError) && (
+            {users.isError && (
+              <div
+                role="alert"
+                className="flex items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive-soft px-4 py-3 text-sm"
+              >
+                <span>{t.loadFailed}</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void users.refetch()}
+                  disabled={users.isFetching}
+                >
+                  {t.retry}
+                </Button>
+              </div>
+            )}
+            {enter.isError && (
               <p role="alert" className="text-sm font-medium text-destructive">
                 {t.failed}
               </p>

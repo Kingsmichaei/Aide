@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, SquarePen } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -9,6 +9,7 @@ import { useI18n } from "@/i18n/useI18n";
 import {
   draftOrder,
   sendChat,
+  type ChatResponse,
   type Language,
   type Order,
   type Product,
@@ -36,12 +37,16 @@ export function ShopPage() {
     null,
   );
   const [announcement, setAnnouncement] = useState("");
+  const [playing, setPlaying] = useState<number | null>(null);
   const nextId = useRef(1);
   const end = useRef<HTMLDivElement>(null);
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const firstName = settings.name.split(" ")[0] ?? "";
 
-  const chat = useMutation({ mutationFn: sendChat });
+  const chat = useMutation({
+    mutationFn: ({ text, fresh }: { text: string; fresh: boolean }) =>
+      sendChat(text, { newConversation: fresh }),
+  });
   const draft = useMutation({ mutationFn: draftOrder });
   const busy = chat.isPending || draft.isPending;
 
@@ -63,38 +68,64 @@ export function ShopPage() {
   }
 
   function play(message: ChatMessage) {
+    setPlaying(message.id);
     speak(
       replyChunks(message.text, message.products, message.language),
       message.language,
       {
         rate: settings.voice_speed,
+        onEnd: () =>
+          setPlaying((current) => (current === message.id ? null : current)),
       },
     );
   }
 
+  function stop() {
+    stopSpeaking();
+    setPlaying(null);
+  }
+
+  function newChat() {
+    stop();
+    chat.reset();
+    setMessages([]);
+    setFailed(null);
+    setSuggestedLanguage(null);
+  }
+
   function send(text: string, shown = text) {
+    // A fresh screen starts a fresh conversation: Aide never refers to
+    // messages the user can no longer see.
+    const fresh = messages.length === 0;
     setFailed(null);
     addMessage({ from: "user", text: shown, products: [], language });
-    chat.mutate(text, {
-      onSuccess: (response) => {
-        setSuggestedLanguage(response.reply_language);
-        addMessage({
-          from: "aide",
-          text: response.reply,
-          products: response.products,
-          language: response.reply_language ?? language,
-        });
-        if (response.draft_order) setCheckout(response.draft_order);
-      },
-      onError: () => setFailed(text),
+    chat.mutate(
+      { text, fresh },
+      { onSuccess: received, onError: () => setFailed(text) },
+    );
+  }
+
+  function received(response: ChatResponse) {
+    setSuggestedLanguage(response.reply_language);
+    addMessage({
+      from: "aide",
+      text: response.reply,
+      products: response.products,
+      language: response.reply_language ?? language,
     });
+    if (response.draft_order) setCheckout(response.draft_order);
   }
 
   function retry() {
     if (!failed) return;
-    // The shopper's message is already shown; send it again without repeating it.
-    setMessages((current) => current.slice(0, -1));
-    send(failed);
+    // The message is already shown; send it again without repeating it. A
+    // failed turn saves nothing, so a failed first message is still fresh.
+    const fresh = messages.length === 1;
+    setFailed(null);
+    chat.mutate(
+      { text: failed, fresh },
+      { onSuccess: received, onError: () => setFailed(failed) },
+    );
   }
 
   function buy(product: Product) {
@@ -129,13 +160,26 @@ export function ShopPage() {
           </section>
         ) : (
           <div className="flex-1 space-y-8 py-8">
-            <h1 className="sr-only">{t.nav.shop}</h1>
+            <div className="flex items-center justify-between gap-3">
+              <h1 className="sr-only">{t.nav.shop}</h1>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={newChat}
+                disabled={busy}
+                className="ms-auto text-muted-foreground"
+              >
+                <SquarePen aria-hidden="true" />
+                {t.shop.newChat}
+              </Button>
+            </div>
             <MessageList
               messages={messages}
               busy={busy}
               onBuy={buy}
               voice={
-                canSpeak() ? { onPlay: play, onStop: stopSpeaking } : undefined
+                canSpeak() ? { playing, onPlay: play, onStop: stop } : undefined
               }
             />
             {chat.isPending && <Thinking />}

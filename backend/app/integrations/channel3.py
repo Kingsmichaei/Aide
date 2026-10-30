@@ -10,6 +10,8 @@ from typing import Any
 import httpx
 from pydantic import BaseModel
 
+from app.integrations.http import make_client
+
 BASE_URL = "https://api.trychannel3.com"
 MAX_LIMIT = 30  # API maximum for search and similar
 CATEGORY_PAGE_SIZE = 100  # API maximum for /v1/categories
@@ -53,7 +55,7 @@ class Category(BaseModel):
 
 class Channel3Client:
     def __init__(self, api_key: str, http: httpx.AsyncClient | None = None) -> None:
-        self._http = http or httpx.AsyncClient(base_url=BASE_URL, timeout=15)
+        self._http = http or make_client(base_url=BASE_URL, timeout=15)
         self._headers = {"x-api-key": api_key}
 
     async def search_products(
@@ -113,7 +115,10 @@ class Channel3Client:
     async def _request(
         self, method: str, path: str, *, allow_404: bool = False, **kwargs: Any
     ) -> Any:
-        response = await self._http.request(method, path, headers=self._headers, **kwargs)
+        try:
+            response = await self._http.request(method, path, headers=self._headers, **kwargs)
+        except httpx.HTTPError as error:  # no connection, DNS, timeout
+            raise Channel3Error(f"Channel3 {method} {path} failed: {error!r}") from error
         if allow_404 and response.status_code == 404:
             return None
         if response.is_error:

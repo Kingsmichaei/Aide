@@ -21,6 +21,8 @@ export const es: Messages = {
     demoNote: "Es una demostración, así que no hay contraseñas.",
     signInAs: (name) => `Continuar como ${name}`,
     failed: "No pudimos iniciar tu sesión. Inténtalo de nuevo.",
+    loadFailed: "No pudimos cargar las cuentas de demostración.",
+    retry: "Reintentar",
     noUsers: "Todavía no hay cuentas. Ejecuta primero el script de datos.",
   },
   shop: {

@@ -11,6 +11,8 @@ from typing import Any, Protocol
 import httpx
 from pydantic import BaseModel
 
+from app.integrations.http import make_client
+
 History = list[dict[str, Any]]
 
 
@@ -51,7 +53,7 @@ class GeminiClient:
     def __init__(self, api_key: str, model: str, http: httpx.AsyncClient | None = None) -> None:
         self._headers = {"x-goog-api-key": api_key}
         self._model = model
-        self._http = http or httpx.AsyncClient(timeout=60)
+        self._http = http or make_client(timeout=60)
 
     async def generate(self, system: str, history: History, tools: list[ToolSpec]) -> LLMTurn:
         body = {
@@ -61,7 +63,10 @@ class GeminiClient:
             "input": [step for entry in history for step in _to_gemini(entry)],
             "tools": [{"type": "function", **tool.model_dump()} for tool in tools],
         }
-        response = await self._http.post(self.URL, json=body, headers=self._headers)
+        try:
+            response = await self._http.post(self.URL, json=body, headers=self._headers)
+        except httpx.HTTPError as error:  # no connection, DNS, timeout
+            raise LLMError(f"Gemini request failed: {error!r}") from error
         if response.is_error:
             raise LLMError(f"Gemini request failed: HTTP {response.status_code}")
         steps: list[dict[str, Any]] = response.json().get("steps", [])
